@@ -18,9 +18,9 @@ class LoginBody(BaseModel):
 @router.post("/login")
 def login(body: LoginBody, request: Request):
     config: auth.AuthConfig = request.app.state.auth
-    if body.username != config.username or not auth.check_password(body.passwd, config.password_hash):
+    if body.username != config.username or not config.check_password(body.passwd):
         return fail(401, "invalid username or password")
-    token = auth.issue_token(config)
+    token = config.issue_token()
     response = JSONResponse(ok({"token": token, "userId": config.user_id}))
     response.set_cookie(auth.COOKIE, token, httponly=True, max_age=auth.TOKEN_TTL_S)
     return response

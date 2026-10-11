@@ -51,13 +51,7 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "RAGTool", FakeTool)
     monkeypatch.setattr(jobs, "_STATUS", {})
     FakeTool.calls = []
-    config = auth.AuthConfig(
-        username="svc",
-        password_hash=auth.make_password_hash(PASSWORD),
-        secret="test-secret",
-    )
-    # Cheap hashing in tests; production uses the default iteration count.
-    monkeypatch.setattr(auth, "_ITERATIONS", 1000)
+    config = auth.AuthConfig(username="svc", password=PASSWORD)
     with TestClient(create_app(config)) as test_client:
         yield test_client
 
@@ -99,12 +93,12 @@ def test_protected_route_without_cookie_is_401_envelope(client):
 
 
 def test_tampered_or_expired_token_is_rejected():
-    config = auth.AuthConfig(username="svc", password_hash="x", secret="s")
-    token = auth.issue_token(config, now=0)  # expired long ago
-    assert not auth.verify_token(config, token)
-    fresh = auth.issue_token(config)
+    config = auth.AuthConfig(username="svc", password="s")
+    token = config.issue_token(now=0)  # expired long ago
+    assert not config.verify_token(token)
+    fresh = config.issue_token()
     user, expiry, sig = fresh.split(".")
-    assert not auth.verify_token(config, f"{user}.{expiry}.{'0' * len(sig)}")
+    assert not config.verify_token(f"{user}.{expiry}.{'0' * len(sig)}")
 
 
 # ------------------------------------------------------------ sources --

@@ -12,8 +12,7 @@ clients only change their base URL.
 ```bash
 uv sync
 export CHILLRAG_USER=svc
-export CHILLRAG_PASSWORD_HASH="$(uv run python -c 'from app.auth import make_password_hash; print(make_password_hash("change-me"))')"
-export CHILLRAG_AUTH_SECRET="$(openssl rand -hex 32)"
+export CHILLRAG_PASSWORD='change-me'
 uv run uvicorn app.main:create_app --factory --workers 1 --host 0.0.0.0 --port 9022
 ```
 
@@ -24,8 +23,7 @@ process.
 
 | Variable | Purpose |
 |---|---|
-| `CHILLRAG_USER`, `CHILLRAG_PASSWORD_HASH` | Login account (hash from `make_password_hash`) |
-| `CHILLRAG_AUTH_SECRET` | Signs `space-auth` tokens; keep it out of the repo |
+| `CHILLRAG_USER`, `CHILLRAG_PASSWORD` | Login account (plaintext; quote it if it has `# $ @` etc.) |
 | `CHILLRAG_MATERIALS_DIR` | Where uploaded folders are written |
 | `CHILLRAG_CACHE_DIR` | Parsed documents, indexes and the service registry |
 | `CHILLRAG_LLM_PROVIDER`, `CHILLRAG_MODEL`, `CHILLRAG_LLM_CONFIG_DIR` | Answer model |

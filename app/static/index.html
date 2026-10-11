@@ -1,160 +1,232 @@
 <!DOCTYPE html>
-<html lang="zh">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>ChillRAG · 文档问答</title>
+<meta name="color-scheme" content="dark light">
+<title>ChillRAG</title>
 <style>
   :root {
-    --bg: #f3f5f8; --card: #ffffff; --ink: #16202b; --muted: #68788a;
-    --line: #e2e8f0; --accent: #2f6df6; --accent-2: #06b1c9;
-    --bubble: linear-gradient(135deg, #2f6df6, #06a5c9); --bubble-ink: #ffffff;
-    --paper: #f8fafc; --err: #dc2626; --shadow: 0 1px 2px rgba(20,34,51,.05), 0 8px 24px rgba(20,34,51,.06);
+    --bg: #0b0e14; --surface: #10141c; --surface-2: #151a24; --raise: #1a2029;
+    --line: #222936; --line-soft: #1b212c;
+    --ink: #e9edf3; --muted: #8b95a5; --faint: #5d6675;
+    --accent: #6d9bff; --accent-2: #7ce0ff;
+    --grad: linear-gradient(135deg, #6d9bff 0%, #7ce0ff 100%);
+    --user-bubble: linear-gradient(135deg, #4f7ef0, #58a6d8);
+    --ok: #3fd68f; --err: #ff6b6b;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
   }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #0e131a; --card: #171f2a; --ink: #e7edf4; --muted: #8d9aa9;
-            --line: #26303d; --paper: #1b2430; --err: #f87171;
-            --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); }
+  @media (prefers-color-scheme: light) {
+    :root { --bg: #f5f6f9; --surface: #ffffff; --surface-2: #f2f4f8; --raise: #ffffff;
+            --line: #e2e6ee; --line-soft: #e9edf3;
+            --ink: #1a2230; --muted: #66707f; --faint: #98a1b0;
+            --user-bubble: linear-gradient(135deg, #4f7ef0, #4aa3d8); }
   }
-  * { box-sizing: border-box; }
+  * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.7 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
-    -webkit-font-smoothing: antialiased;
-  }
-  .app { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
-
-  /* ---------- header ---------- */
-  header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
-  .logo {
-    width: 40px; height: 40px; border-radius: 12px; flex: none;
-    background: var(--bubble); color: #fff; font-size: 21px; line-height: 40px;
-    text-align: center; box-shadow: var(--shadow);
-  }
-  header h1 { font-size: 19px; margin: 0; letter-spacing: .2px; }
-  header p { margin: 0; font-size: 12.5px; color: var(--muted); }
-  .who { margin-left: auto; font-size: 12.5px; color: var(--muted);
-         background: var(--card); border: 1px solid var(--line);
-         border-radius: 999px; padding: 4px 12px; }
-
-  .card {
-    background: var(--card); border: 1px solid var(--line);
-    border-radius: 16px; box-shadow: var(--shadow); padding: 22px;
+    background: var(--bg); color: var(--ink); font: 14px/1.65 var(--sans);
+    -webkit-font-smoothing: antialiased; display: flex; flex-direction: column;
   }
 
-  /* ---------- login ---------- */
-  #login-card { max-width: 400px; margin: 8vh auto 0; }
-  #login-card h2 { margin: 0 0 4px; font-size: 17px; }
-  #login-card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+  /* ---------- top bar ---------- */
+  .topbar {
+    display: flex; align-items: center; gap: 10px; height: 54px; flex: none;
+    padding: 0 18px; border-bottom: 1px solid var(--line);
+    background: color-mix(in srgb, var(--surface) 82%, transparent);
+    backdrop-filter: blur(14px); position: sticky; top: 0; z-index: 10;
+  }
+  .mark {
+    width: 28px; height: 28px; border-radius: 9px; background: var(--grad);
+    color: #071018; font-size: 15px; font-weight: 700; line-height: 28px; text-align: center;
+    box-shadow: 0 0 0 1px rgba(255,255,255,.08), 0 4px 14px rgba(90,150,255,.25);
+  }
+  .brand { font-weight: 650; letter-spacing: .2px; font-size: 14.5px; }
+  .brand em { font-style: normal; color: var(--faint); font-weight: 450; margin-left: 8px; font-size: 12px; }
+  .spacer { flex: 1; }
+  select {
+    font: 12.5px/1 var(--sans); color: var(--ink); background: var(--surface-2);
+    border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px;
+    max-width: 220px; cursor: pointer; transition: border-color .15s;
+  }
+  select:focus { outline: none; border-color: var(--accent); }
+  .who {
+    font: 11.5px var(--mono); color: var(--muted); border: 1px solid var(--line);
+    border-radius: 999px; padding: 4px 11px;
+  }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: var(--ok);
+         box-shadow: 0 0 8px var(--ok); display: inline-block; margin-right: 7px; }
 
-  label { display: block; font-size: 12.5px; color: var(--muted); margin: 12px 0 5px; }
-  input, select, textarea {
-    width: 100%; font: inherit; color: var(--ink); background: var(--paper);
-    border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px;
-    transition: border-color .15s, box-shadow .15s;
+  /* ---------- thread ---------- */
+  main { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
+  .thread { max-width: 780px; margin: 0 auto; padding: 28px 22px 30px; }
+  .msg { margin-bottom: 22px; animation: rise .28s cubic-bezier(.2,.7,.3,1) both; }
+  .msg.user { display: flex; justify-content: flex-end; }
+  .msg.user .bubble {
+    background: var(--user-bubble); color: #fff; border-radius: 14px 14px 4px 14px;
+    padding: 10px 15px; max-width: 72%; white-space: pre-wrap; word-break: break-word;
+    box-shadow: 0 4px 16px rgba(60,110,220,.22);
   }
-  input:focus, select:focus, textarea:focus {
-    outline: none; border-color: var(--accent);
-    box-shadow: 0 0 0 3px rgba(47,109,246,.15);
+  .msg .kicker {
+    display: flex; align-items: center; gap: 8px; margin-bottom: 7px;
+    font: 10.5px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint);
   }
-  textarea { resize: vertical; min-height: 76px; }
+  .kicker .glyph {
+    width: 16px; height: 16px; border-radius: 5px; background: var(--grad);
+    color: #071018; font-size: 9px; font-weight: 700; line-height: 16px; text-align: center;
+  }
+  .msg.ai .bubble {
+    background: var(--surface); border: 1px solid var(--line); border-radius: 4px 14px 14px 14px;
+    padding: 15px 18px; white-space: pre-wrap; word-break: break-word;
+    font-size: 14px; line-height: 1.75;
+    box-shadow: 0 1px 0 rgba(0,0,0,.12), 0 10px 30px rgba(0,0,0,.16);
+  }
+  .msg.ai strong { font-weight: 650; color: var(--ink); }
+  .msg.ai code {
+    font: 12.5px/1.5 var(--mono); background: var(--surface-2);
+    border: 1px solid var(--line-soft); border-radius: 5px; padding: 1px 5px;
+  }
+  .typing { display: inline-flex; gap: 4px; padding: 6px 2px; }
+  .typing i {
+    width: 6px; height: 6px; border-radius: 50%; background: var(--muted);
+    animation: blink 1.2s infinite;
+  }
+  .typing i:nth-child(2) { animation-delay: .18s; }
+  .typing i:nth-child(3) { animation-delay: .36s; }
+  @keyframes blink { 0%, 60%, 100% { opacity: .25; transform: translateY(0); }
+                     30% { opacity: 1; transform: translateY(-3px); } }
 
-  button {
-    font: inherit; font-weight: 600; cursor: pointer; border: none;
-    color: var(--bubble-ink); background: var(--bubble);
-    border-radius: 10px; padding: 10px 26px;
-    transition: transform .1s, filter .15s, opacity .15s;
+  /* ---------- empty state ---------- */
+  .hero { text-align: center; padding: 11vh 0 20px; }
+  .hero .flake {
+    font-size: 44px; line-height: 1; background: var(--grad);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 6px 24px rgba(100,160,255,.3));
   }
-  button:hover:not(:disabled) { filter: brightness(1.07); }
-  button:active:not(:disabled) { transform: scale(.98); }
-  button:disabled { opacity: .55; cursor: default; }
+  .hero h2 { font-size: 19px; font-weight: 650; margin: 18px 0 6px; letter-spacing: .2px; }
+  .hero p { color: var(--muted); font-size: 13.5px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; margin-top: 26px; }
+  .chip {
+    font: 12.5px var(--sans); color: var(--muted); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer;
+    transition: all .18s;
+  }
+  .chip:hover { color: var(--ink); border-color: var(--accent); transform: translateY(-1px);
+                box-shadow: 0 4px 14px rgba(0,0,0,.18); }
 
   /* ---------- composer ---------- */
-  #main { display: none; }
-  .composer { margin-bottom: 18px; }
-  .composer .top { display: flex; gap: 12px; }
-  .composer .top > div { flex: 1; }
-  .composer .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-  .composer .actions .status { flex: 1; font-size: 13px; color: var(--muted); min-height: 20px; }
-  .composer .actions .status.err { color: var(--err); }
+  .dock { flex: none; border-top: 1px solid var(--line);
+          background: color-mix(in srgb, var(--surface) 86%, transparent);
+          backdrop-filter: blur(14px); padding: 14px 22px 18px; }
+  .composer { max-width: 780px; margin: 0 auto; }
+  .box {
+    display: flex; align-items: flex-end; gap: 10px; background: var(--raise);
+    border: 1px solid var(--line); border-radius: 14px; padding: 9px 9px 9px 16px;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  .box:focus-within { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(109,155,255,.14); }
+  textarea {
+    flex: 1; background: none; border: none; outline: none; resize: none;
+    color: var(--ink); font: 14px/1.6 var(--sans); max-height: 160px; padding: 7px 0;
+  }
+  textarea::placeholder { color: var(--faint); }
+  .send {
+    flex: none; width: 38px; height: 38px; border-radius: 10px; border: none; cursor: pointer;
+    background: var(--grad); color: #071018; font-size: 16px; font-weight: 700; line-height: 38px;
+    transition: transform .12s, filter .15s, opacity .15s;
+  }
+  .send:hover:not(:disabled) { filter: brightness(1.1); transform: translateY(-1px); }
+  .send:active:not(:disabled) { transform: scale(.94); }
+  .send:disabled { opacity: .4; cursor: default; }
+  .hint { display: flex; justify-content: space-between; margin-top: 8px;
+          font: 11.5px var(--mono); color: var(--faint); padding: 0 4px; min-height: 15px; }
+  .hint .state.err { color: var(--err); }
 
-  /* ---------- conversation ---------- */
-  .turn { display: flex; margin: 18px 0; animation: rise .25s ease both; }
-  .turn.q { justify-content: flex-end; }
-  .turn .bubble {
-    max-width: 82%; border-radius: 16px; padding: 12px 16px;
-    white-space: pre-wrap; word-break: break-word;
+  /* ---------- login ---------- */
+  #gate { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center;
+          justify-content: center; background:
+            radial-gradient(1000px 500px at 20% -10%, rgba(109,155,255,.13), transparent 60%),
+            radial-gradient(800px 500px at 90% 110%, rgba(124,224,255,.10), transparent 60%), var(--bg); }
+  .gate-card {
+    width: min(360px, calc(100vw - 40px)); background: var(--surface);
+    border: 1px solid var(--line); border-radius: 18px; padding: 30px 28px 26px;
+    box-shadow: 0 30px 80px rgba(0,0,0,.4);
+    animation: rise .35s cubic-bezier(.2,.7,.3,1) both;
   }
-  .turn.q .bubble { background: var(--bubble); color: var(--bubble-ink);
-                    border-bottom-right-radius: 4px; }
-  .turn.a { justify-content: flex-start; }
-  .turn.a .bubble {
-    background: var(--card); border: 1px solid var(--line);
-    border-bottom-left-radius: 4px; box-shadow: var(--shadow); width: 100%; max-width: 100%;
+  .gate-card .mark { width: 42px; height: 42px; border-radius: 13px; font-size: 22px; line-height: 42px; margin-bottom: 18px; }
+  .gate-card h1 { font-size: 18px; font-weight: 650; letter-spacing: .2px; }
+  .gate-card .sub { color: var(--muted); font-size: 13px; margin: 4px 0 18px; }
+  .field label { display: block; font: 11px var(--mono); letter-spacing: .1em;
+                 text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
+  .field input {
+    width: 100%; background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 10px 13px; color: var(--ink); font: 14px var(--sans);
+    transition: border-color .15s, box-shadow .15s;
   }
-  .turn .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
-  .turn.q .meta { text-align: right; }
-  .turn.a strong { font-weight: 650; }
-  .turn.a code {
-    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
-    background: var(--paper); border: 1px solid var(--line);
-    border-radius: 6px; padding: 1px 5px;
+  .field input:focus { outline: none; border-color: var(--accent);
+                       box-shadow: 0 0 0 3px rgba(109,155,255,.14); }
+  .go {
+    width: 100%; margin-top: 22px; padding: 11px; border: none; border-radius: 10px;
+    background: var(--grad); color: #071018; font: 600 14px var(--sans); cursor: pointer;
+    transition: transform .12s, filter .15s;
   }
-  #empty { text-align: center; color: var(--muted); font-size: 14px; padding: 46px 0; }
-  #empty .big { font-size: 34px; display: block; margin-bottom: 10px; }
+  .go:hover { filter: brightness(1.08); }
+  .go:active { transform: scale(.98); }
+  .gate-msg { font-size: 12.5px; color: var(--err); margin-top: 12px; min-height: 16px; }
 
-  .spin {
-    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
-    border: 2px solid var(--muted); border-top-color: transparent;
-    animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 7px;
-  }
-  @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+  ::-webkit-scrollbar { width: 10px; }
+  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid var(--bg); }
 </style>
 </head>
 <body>
-<div class="app">
-  <header>
-    <div class="logo">❄</div>
-    <div>
-      <h1>ChillRAG</h1>
-      <p>文档问答 · 检索 + 推理</p>
-    </div>
-    <span class="who" id="who" hidden></span>
-  </header>
 
-  <div class="card" id="login-card">
-    <h2>登录</h2>
-    <p class="sub">使用服务账号登录后开始提问。</p>
-    <label>账号</label>
-    <input id="user" autocomplete="username">
-    <label>密码</label>
-    <input id="pass" type="password" autocomplete="current-password"
-           onKeyDown="if (event.key === 'Enter') $('login').click()">
-    <div style="margin-top:18px"><button id="login">登 录</button></div>
-    <div class="sub" id="login-status" style="margin:12px 0 0"></div>
+<!-- login gate -->
+<div id="gate" hidden>
+  <div class="gate-card">
+    <div class="mark">❄</div>
+    <h1>Sign in to ChillRAG</h1>
+    <p class="sub">Document question answering over your corpus.</p>
+    <div class="field"><label>Username</label><input id="user" autocomplete="username"></div>
+    <div class="field"><label>Password</label><input id="pass" type="password" autocomplete="current-password"></div>
+    <button class="go" id="login">Sign in</button>
+    <div class="gate-msg" id="gate-msg"></div>
+  </div>
+</div>
+
+<!-- app shell -->
+<div id="shell" style="display:none; flex:1; min-height:0">
+  <div class="topbar">
+    <div class="mark">❄</div>
+    <div class="brand">ChillRAG<em>doc qa</em></div>
+    <div class="spacer"></div>
+    <span class="who" id="who" hidden></span>
+    <select id="source" hidden></select>
   </div>
 
-  <div id="main">
-    <div class="card composer">
-      <div class="top">
-        <div>
-          <label>语料（source）</label>
-          <select id="source"></select>
-        </div>
-      </div>
-      <label>问题</label>
-      <textarea id="question" placeholder="例如：天津银行2021年的营业收入是多少？"
-                onKeyDown="if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) ask()"></textarea>
-      <div class="actions">
-        <button id="ask">提 问</button>
-        <span class="status" id="status">⌘/Ctrl + Enter 发送</span>
+  <main>
+    <div class="thread" id="thread">
+      <div class="hero" id="hero">
+        <div class="flake">❄</div>
+        <h2>Ask your documents.</h2>
+        <p>Answers cite the exact files and pages they come from.</p>
+        <div class="chips" id="chips"></div>
       </div>
     </div>
+  </main>
 
-    <div id="thread">
-      <div id="empty"><span class="big">❄</span>选择语料，输入问题<br>回答将引用具体文档与页码</div>
+  <div class="dock">
+    <div class="composer">
+      <div class="box">
+        <textarea id="question" rows="1"
+                  placeholder="Ask anything about the selected corpus…"></textarea>
+        <button class="send" id="ask" title="Send">↑</button>
+      </div>
+      <div class="hint">
+        <span class="state" id="state"></span>
+        <span>⌘ ↵ to send</span>
+      </div>
     </div>
   </div>
 </div>
@@ -163,12 +235,24 @@
 "use strict";
 const $ = (id) => document.getElementById(id);
 
-(async () => { if (await loadSources()) showApp(); })();
+const EXAMPLES = [
+  "What was the total operating revenue in 2021?",
+  "Summarize the main risk factors.",
+  "List the top shareholders and their stakes.",
+];
 
-$("login").addEventListener("click", async () => {
-  const st = $("login-status");
-  st.textContent = "登录中…";
-  st.style.color = "";
+// ---- session bootstrap ----------------------------------------------------
+(async () => {
+  const ok = await loadSources();
+  $("gate").hidden = ok;
+  $("shell").style.display = ok ? "flex" : "none";
+})();
+
+$("pass").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
+$("login").addEventListener("click", signIn);
+async function signIn() {
+  const msg = $("gate-msg");
+  msg.textContent = "";
   const resp = await fetch("/space/api/passport/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -176,18 +260,26 @@ $("login").addEventListener("click", async () => {
   });
   const body = await resp.json().catch(() => ({}));
   if (resp.status !== 200 || body.code !== 0) {
-    st.textContent = "登录失败：" + (body.msg || resp.status);
-    st.style.color = "var(--err)";
+    msg.textContent = body.msg || ("Sign-in failed (" + resp.status + ")");
     return;
   }
-  if (await loadSources()) showApp();
-});
+  if (body.data && body.data.userId != null) {
+    $("who").hidden = false;
+    $("who").textContent = "<span class='dot'></span>user " + body.data.userId;
+  }
+  if (await loadSources()) {
+    $("gate").hidden = true;
+    $("shell").style.display = "flex";
+    $("question").focus();
+  }
+}
 
 async function loadSources() {
   const resp = await fetch("/space/api/service/asset-file/resource");
   if (resp.status === 401) return false;
   const body = await resp.json();
   const sel = $("source");
+  sel.hidden = false;
   sel.innerHTML = "";
   for (const s of body.data || []) {
     const opt = document.createElement("option");
@@ -195,30 +287,46 @@ async function loadSources() {
     opt.textContent = s.resourceName;
     sel.appendChild(opt);
   }
-  if (body.data && body.data[0] && body.data[0].userId != null)
-    $("who").textContent = "user " + body.data[0].userId;
+  buildChips();
   return true;
 }
 
-function showApp() {
-  $("login-card").style.display = "none";
-  $("main").style.display = "block";
+function buildChips() {
+  const box = $("chips");
+  box.innerHTML = "";
+  for (const text of EXAMPLES) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = text;
+    chip.addEventListener("click", () => { $("question").value = text; $("question").focus(); });
+    box.appendChild(chip);
+  }
 }
 
+// ---- asking ---------------------------------------------------------------
 $("ask").addEventListener("click", ask);
+$("question").addEventListener("keydown", (e) => {
+  if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask();
+});
+$("question").addEventListener("input", function () {
+  this.style.height = "auto";
+  this.style.height = Math.min(this.scrollHeight, 160) + "px";
+});
+
 async function ask() {
   const question = $("question").value.trim();
-  const sourceId = $("source").value;
   if (!question || $("ask").disabled) return;
+  const sourceName = $("source").selectedOptions[0]?.textContent || "";
   $("ask").disabled = true;
-  $("question").value = "";
-  const empty = $("empty"); if (empty) empty.remove();
+  $("question").value = ""; $("question").style.height = "auto";
+  $("hero")?.remove();
 
-  addTurn("q", question, "");
-  const aBubble = addTurn("a", "", "");
+  addUser(question);
+  const bubble = addAi(sourceName);
+
   const t0 = performance.now();
   const timer = setInterval(() => {
-    setStatus('<span class="spin"></span>检索并思考中… ' + Math.round((performance.now() - t0) / 1000) + "s");
+    setState("retrieving · " + Math.round((performance.now() - t0) / 1000) + "s");
   }, 500);
   try {
     const resp = await fetch("/space/api/service/sse/llmapi/ht/text/post-answer", {
@@ -226,7 +334,7 @@ async function ask() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         question,
-        source_category_filter: JSON.stringify({ [String(sourceId)]: [] }),
+        source_category_filter: JSON.stringify({ [String($("source").value)]: [] }),
         mode: 0,
       }),
     });
@@ -235,32 +343,44 @@ async function ask() {
       throw new Error(body.msg || ("HTTP " + resp.status));
     }
     const text = await readSse(resp);
-    aBubble.innerHTML = render(text) || "<em style='color:var(--muted)'>(空回答)</em>";
-    const secs = ((performance.now() - t0) / 1000).toFixed(1);
-    aBubble.nextElementSibling.textContent = $("source").selectedOptions[0].textContent + " · " + secs + "s";
-    setStatus("");
+    bubble.innerHTML = render(text) || "<em style='color:var(--muted)'>(empty answer)</em>";
+    setState("answered in " + ((performance.now() - t0) / 1000).toFixed(1) + "s");
   } catch (err) {
-    aBubble.remove();
-    setStatus("失败：" + err.message, true);
+    bubble.closest(".msg").remove();
+    setState(err.message, true);
   } finally {
     clearInterval(timer);
     $("ask").disabled = false;
+    $("question").focus();
   }
 }
 
-function addTurn(kind, text, meta) {
-  const turn = document.createElement("div");
-  turn.className = "turn " + kind;
-  const bubble = document.createElement("div");
-  bubble.className = "bubble";
-  bubble.innerHTML = text ? render(text) : '<span class="spin"></span>';
-  turn.appendChild(bubble);
-  const m = document.createElement("div");
-  m.className = "meta"; m.textContent = meta;
-  turn.appendChild(m);
-  $("thread").appendChild(turn);
-  window.scrollTo(0, document.body.scrollHeight);
-  return bubble;
+function addUser(text) {
+  const msg = document.createElement("div");
+  msg.className = "msg user";
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.textContent = text;
+  msg.appendChild(b);
+  $("thread").appendChild(msg);
+  scrollEnd();
+}
+
+function addAi(sourceName) {
+  const msg = document.createElement("div");
+  msg.className = "msg ai";
+  const kicker = document.createElement("div");
+  kicker.className = "kicker";
+  kicker.innerHTML = "<span class='glyph'>❄</span><span>chillrag · " +
+    escapeHtml(sourceName).toLowerCase() + "</span>";
+  const b = document.createElement("div");
+  b.className = "bubble";
+  b.innerHTML = "<span class='typing'><i></i><i></i><i></i></span>";
+  msg.appendChild(kicker);
+  msg.appendChild(b);
+  $("thread").appendChild(msg);
+  scrollEnd();
+  return b;
 }
 
 // Vendor SSE framing: every "data: " line is payload; newlines and spaces
@@ -282,17 +402,19 @@ async function readSse(resp) {
   return text.trimStart();
 }
 
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
 function render(text) {
-  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
-  return esc
+  return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
-
-function setStatus(msg, isErr) {
-  $("status").className = "status" + (isErr ? " err" : "");
-  $("status").innerHTML = msg;
+function setState(msg, isErr) {
+  $("state").className = "state" + (isErr ? " err" : "");
+  $("state").textContent = msg || "";
 }
+function scrollEnd() { document.querySelector("main").scrollTop = 1e9; }
 </script>
 </body>
 </html>
