@@ -13,6 +13,15 @@ requires-python = ">=3.11"
 # `uv sync` has to produce a complete runtime on the intranet host, where there
 # is no reachable package index to fetch a narrowly-chosen extra from.
 dependencies = [
+    # HTTP service
+    "fastapi>=0.115",
+    "uvicorn>=0.30",
+    "python-multipart",
+    # Imported by the parser, LLM registry and chunker; declared rather than transitive.
+    "lxml",
+    "pyyaml",
+    "json-repair",
+    "transformers",
     # Service plumbing.
     "pydantic>=2",
     "python-dotenv",
@@ -62,6 +71,7 @@ dependencies = [
 [dependency-groups]
 dev = [
     "pytest>=9.1.1",
+    "httpx",
 ]
 
 # `chillrag*`, not `chillrag`. The pattern is fnmatch, so the bare name matches only
@@ -74,6 +84,7 @@ include = ["chillrag*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+pythonpath = ["."]
 
 # Resolve for every platform this is run on, not only the one that happens to
 # write the lockfile: macOS for development, Linux for the intranet host, Windows

@@ -566,6 +566,70 @@ wheels = [
 ]
 
 [[package]]
+name = "chillrag"
+version = "0.1.0"
+source = { editable = "." }
+dependencies = [
+    { name = "colorlog", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "faiss-cpu", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "fastapi", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "json-repair", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "lxml", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "mineru", extra = ["pipeline"], marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and sys_platform == 'darwin') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')" },
+    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')" },
+    { name = "openai", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "openpyxl", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pycryptodome", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyserini", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "python-multipart", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pyyaml", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "rich", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "sentence-transformers", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "torchvision", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "transformers", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "uvicorn", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[package.dev-dependencies]
+dev = [
+    { name = "httpx", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+    { name = "pytest", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "colorlog" },
+    { name = "faiss-cpu" },
+    { name = "fastapi", specifier = ">=0.115" },
+    { name = "json-repair" },
+    { name = "lxml" },
+    { name = "mineru", extras = ["pipeline"], specifier = ">=3.4.4,<4" },
+    { name = "numpy" },
+    { name = "openai", specifier = ">=1" },
+    { name = "openpyxl" },
+    { name = "pycryptodome", specifier = ">=3.23.0" },
+    { name = "pydantic", specifier = ">=2" },
+    { name = "pyserini", specifier = ">=1.6.0" },
+    { name = "python-dotenv" },
+    { name = "python-multipart" },
+    { name = "pyyaml" },
+    { name = "rich" },
+    { name = "sentence-transformers", specifier = ">=5.7.0" },
+    { name = "torchvision", specifier = ">=0.28.0" },
+    { name = "transformers" },
+    { name = "uvicorn", specifier = ">=0.30" },
+]
+
+[package.metadata.requires-dev]
+dev = [
+    { name = "httpx" },
+    { name = "pytest", specifier = ">=9.1.1" },
+]
+
+[[package]]
 name = "click"
 version = "8.5.0"
 source = { registry = "https://pypi.org/simple" }
@@ -1266,52 +1330,6 @@ sdist = { url = "https://files.pythonhosted.org/packages/6f/38/88cd6eda96c40594a
 wheels = [
     { url = "https://files.pythonhosted.org/packages/29/33/af0635ab07fe83b1788a1dbe370ff3e226062495a998335cb18a1cac81aa/filelock-4.0.1-py3-none-any.whl", hash = "sha256:481a321a27bef441e23c53371c6abc8d7d16e26b97090074ba44f7538a3fd55a", size = 106219, upload-time = "2026-09-19T01:08:14.49Z" },
 ]
-
-[[package]]
-name = "finrag"
-version = "0.1.0"
-source = { editable = "." }
-dependencies = [
-    { name = "colorlog", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "faiss-cpu", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "mineru", extra = ["pipeline"], marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "numpy", version = "2.4.6", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version < '3.12' and sys_platform == 'darwin') or (python_full_version < '3.12' and sys_platform == 'linux') or (python_full_version < '3.12' and sys_platform == 'win32')" },
-    { name = "numpy", version = "2.5.3", source = { registry = "https://pypi.org/simple" }, marker = "(python_full_version >= '3.12' and sys_platform == 'darwin') or (python_full_version >= '3.12' and sys_platform == 'linux') or (python_full_version >= '3.12' and sys_platform == 'win32')" },
-    { name = "openai", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "openpyxl", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pycryptodome", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pydantic", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "pyserini", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "python-dotenv", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "rich", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "sentence-transformers", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-    { name = "torchvision", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-
-[package.dev-dependencies]
-dev = [
-    { name = "pytest", marker = "sys_platform == 'darwin' or sys_platform == 'linux' or sys_platform == 'win32'" },
-]
-
-[package.metadata]
-requires-dist = [
-    { name = "colorlog" },
-    { name = "faiss-cpu" },
-    { name = "mineru", extras = ["pipeline"], specifier = ">=3.4.4,<4" },
-    { name = "numpy" },
-    { name = "openai", specifier = ">=1" },
-    { name = "openpyxl" },
-    { name = "pycryptodome", specifier = ">=3.23.0" },
-    { name = "pydantic", specifier = ">=2" },
-    { name = "pyserini", specifier = ">=1.6.0" },
-    { name = "python-dotenv" },
-    { name = "rich" },
-    { name = "sentence-transformers", specifier = ">=5.7.0" },
-    { name = "torchvision", specifier = ">=0.28.0" },
-]
-
-[package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=9.1.1" }]
 
 [[package]]
 name = "flask"
