@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ChillRAG · 文档问答</title>
+<style>
+  :root {
+    --bg: #f3f5f8; --card: #ffffff; --ink: #16202b; --muted: #68788a;
+    --line: #e2e8f0; --accent: #2f6df6; --accent-2: #06b1c9;
+    --bubble: linear-gradient(135deg, #2f6df6, #06a5c9); --bubble-ink: #ffffff;
+    --paper: #f8fafc; --err: #dc2626; --shadow: 0 1px 2px rgba(20,34,51,.05), 0 8px 24px rgba(20,34,51,.06);
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #0e131a; --card: #171f2a; --ink: #e7edf4; --muted: #8d9aa9;
+            --line: #26303d; --paper: #1b2430; --err: #f87171;
+            --shadow: 0 1px 2px rgba(0,0,0,.4), 0 8px 24px rgba(0,0,0,.35); }
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.7 -apple-system, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  .app { max-width: 860px; margin: 0 auto; padding: 28px 20px 60px; }
+
+  /* ---------- header ---------- */
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 12px; flex: none;
+    background: var(--bubble); color: #fff; font-size: 21px; line-height: 40px;
+    text-align: center; box-shadow: var(--shadow);
+  }
+  header h1 { font-size: 19px; margin: 0; letter-spacing: .2px; }
+  header p { margin: 0; font-size: 12.5px; color: var(--muted); }
+  .who { margin-left: auto; font-size: 12.5px; color: var(--muted);
+         background: var(--card); border: 1px solid var(--line);
+         border-radius: 999px; padding: 4px 12px; }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line);
+    border-radius: 16px; box-shadow: var(--shadow); padding: 22px;
+  }
+
+  /* ---------- login ---------- */
+  #login-card { max-width: 400px; margin: 8vh auto 0; }
+  #login-card h2 { margin: 0 0 4px; font-size: 17px; }
+  #login-card .sub { color: var(--muted); font-size: 13px; margin: 0 0 14px; }
+
+  label { display: block; font-size: 12.5px; color: var(--muted); margin: 12px 0 5px; }
+  input, select, textarea {
+    width: 100%; font: inherit; color: var(--ink); background: var(--paper);
+    border: 1px solid var(--line); border-radius: 10px; padding: 10px 13px;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus, textarea:focus {
+    outline: none; border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(47,109,246,.15);
+  }
+  textarea { resize: vertical; min-height: 76px; }
+
+  button {
+    font: inherit; font-weight: 600; cursor: pointer; border: none;
+    color: var(--bubble-ink); background: var(--bubble);
+    border-radius: 10px; padding: 10px 26px;
+    transition: transform .1s, filter .15s, opacity .15s;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.07); }
+  button:active:not(:disabled) { transform: scale(.98); }
+  button:disabled { opacity: .55; cursor: default; }
+
+  /* ---------- composer ---------- */
+  #main { display: none; }
+  .composer { margin-bottom: 18px; }
+  .composer .top { display: flex; gap: 12px; }
+  .composer .top > div { flex: 1; }
+  .composer .actions { display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .composer .actions .status { flex: 1; font-size: 13px; color: var(--muted); min-height: 20px; }
+  .composer .actions .status.err { color: var(--err); }
+
+  /* ---------- conversation ---------- */
+  .turn { display: flex; margin: 18px 0; animation: rise .25s ease both; }
+  .turn.q { justify-content: flex-end; }
+  .turn .bubble {
+    max-width: 82%; border-radius: 16px; padding: 12px 16px;
+    white-space: pre-wrap; word-break: break-word;
+  }
+  .turn.q .bubble { background: var(--bubble); color: var(--bubble-ink);
+                    border-bottom-right-radius: 4px; }
+  .turn.a { justify-content: flex-start; }
+  .turn.a .bubble {
+    background: var(--card); border: 1px solid var(--line);
+    border-bottom-left-radius: 4px; box-shadow: var(--shadow); width: 100%; max-width: 100%;
+  }
+  .turn .meta { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .turn.q .meta { text-align: right; }
+  .turn.a strong { font-weight: 650; }
+  .turn.a code {
+    font: 13px/1.5 ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+    background: var(--paper); border: 1px solid var(--line);
+    border-radius: 6px; padding: 1px 5px;
+  }
+  #empty { text-align: center; color: var(--muted); font-size: 14px; padding: 46px 0; }
+  #empty .big { font-size: 34px; display: block; margin-bottom: 10px; }
+
+  .spin {
+    display: inline-block; width: 12px; height: 12px; border-radius: 50%;
+    border: 2px solid var(--muted); border-top-color: transparent;
+    animation: spin .8s linear infinite; vertical-align: -2px; margin-right: 7px;
+  }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  @keyframes rise { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="logo">❄</div>
+    <div>
+      <h1>ChillRAG</h1>
+      <p>文档问答 · 检索 + 推理</p>
+    </div>
+    <span class="who" id="who" hidden></span>
+  </header>
+
+  <div class="card" id="login-card">
+    <h2>登录</h2>
+    <p class="sub">使用服务账号登录后开始提问。</p>
+    <label>账号</label>
+    <input id="user" autocomplete="username">
+    <label>密码</label>
+    <input id="pass" type="password" autocomplete="current-password"
+           onKeyDown="if (event.key === 'Enter') $('login').click()">
+    <div style="margin-top:18px"><button id="login">登 录</button></div>
+    <div class="sub" id="login-status" style="margin:12px 0 0"></div>
+  </div>
+
+  <div id="main">
+    <div class="card composer">
+      <div class="top">
+        <div>
+          <label>语料（source）</label>
+          <select id="source"></select>
+        </div>
+      </div>
+      <label>问题</label>
+      <textarea id="question" placeholder="例如：天津银行2021年的营业收入是多少？"
+                onKeyDown="if (event.key === 'Enter' && (event.metaKey || event.ctrlKey)) ask()"></textarea>
+      <div class="actions">
+        <button id="ask">提 问</button>
+        <span class="status" id="status">⌘/Ctrl + Enter 发送</span>
+      </div>
+    </div>
+
+    <div id="thread">
+      <div id="empty"><span class="big">❄</span>选择语料，输入问题<br>回答将引用具体文档与页码</div>
+    </div>
+  </div>
+</div>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+
+(async () => { if (await loadSources()) showApp(); })();
+
+$("login").addEventListener("click", async () => {
+  const st = $("login-status");
+  st.textContent = "登录中…";
+  st.style.color = "";
+  const resp = await fetch("/space/api/passport/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ username: $("user").value, passwd: $("pass").value }),
+  });
+  const body = await resp.json().catch(() => ({}));
+  if (resp.status !== 200 || body.code !== 0) {
+    st.textContent = "登录失败：" + (body.msg || resp.status);
+    st.style.color = "var(--err)";
+    return;
+  }
+  if (await loadSources()) showApp();
+});
+
+async function loadSources() {
+  const resp = await fetch("/space/api/service/asset-file/resource");
+  if (resp.status === 401) return false;
+  const body = await resp.json();
+  const sel = $("source");
+  sel.innerHTML = "";
+  for (const s of body.data || []) {
+    const opt = document.createElement("option");
+    opt.value = s.sourceId;
+    opt.textContent = s.resourceName;
+    sel.appendChild(opt);
+  }
+  if (body.data && body.data[0] && body.data[0].userId != null)
+    $("who").textContent = "user " + body.data[0].userId;
+  return true;
+}
+
+function showApp() {
+  $("login-card").style.display = "none";
+  $("main").style.display = "block";
+}
+
+$("ask").addEventListener("click", ask);
+async function ask() {
+  const question = $("question").value.trim();
+  const sourceId = $("source").value;
+  if (!question || $("ask").disabled) return;
+  $("ask").disabled = true;
+  $("question").value = "";
+  const empty = $("empty"); if (empty) empty.remove();
+
+  addTurn("q", question, "");
+  const aBubble = addTurn("a", "", "");
+  const t0 = performance.now();
+  const timer = setInterval(() => {
+    setStatus('<span class="spin"></span>检索并思考中… ' + Math.round((performance.now() - t0) / 1000) + "s");
+  }, 500);
+  try {
+    const resp = await fetch("/space/api/service/sse/llmapi/ht/text/post-answer", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        question,
+        source_category_filter: JSON.stringify({ [String(sourceId)]: [] }),
+        mode: 0,
+      }),
+    });
+    if (resp.status !== 200) {
+      const body = await resp.json().catch(() => ({}));
+      throw new Error(body.msg || ("HTTP " + resp.status));
+    }
+    const text = await readSse(resp);
+    aBubble.innerHTML = render(text) || "<em style='color:var(--muted)'>(空回答)</em>";
+    const secs = ((performance.now() - t0) / 1000).toFixed(1);
+    aBubble.nextElementSibling.textContent = $("source").selectedOptions[0].textContent + " · " + secs + "s";
+    setStatus("");
+  } catch (err) {
+    aBubble.remove();
+    setStatus("失败：" + err.message, true);
+  } finally {
+    clearInterval(timer);
+    $("ask").disabled = false;
+  }
+}
+
+function addTurn(kind, text, meta) {
+  const turn = document.createElement("div");
+  turn.className = "turn " + kind;
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = text ? render(text) : '<span class="spin"></span>';
+  turn.appendChild(bubble);
+  const m = document.createElement("div");
+  m.className = "meta"; m.textContent = meta;
+  turn.appendChild(m);
+  $("thread").appendChild(turn);
+  window.scrollTo(0, document.body.scrollHeight);
+  return bubble;
+}
+
+// Vendor SSE framing: every "data: " line is payload; newlines and spaces
+// travel as the literal markers [new_line] / [whitespace].
+async function readSse(resp) {
+  const reader = resp.body.getReader();
+  const decoder = new TextDecoder();
+  let raw = "";
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    for (const line of decoder.decode(value, { stream: true }).split("\n")) {
+      if (line.startsWith("data:")) raw += line.slice(5).replace(/^\s+/, "");
+    }
+  }
+  let text = raw.replaceAll("[new_line]", "\n").replaceAll("[whitespace]", " ");
+  const cut = text.indexOf("</strong>");           // drop the stream preamble
+  if (cut !== -1) text = text.slice(cut + "</strong>".length);
+  return text.trimStart();
+}
+
+function render(text) {
+  const esc = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return esc
+    .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+    .replace(/`([^`]+)`/g, "<code>$1</code>");
+}
+
+function setStatus(msg, isErr) {
+  $("status").className = "status" + (isErr ? " err" : "");
+  $("status").innerHTML = msg;
+}
+</script>
+</body>
+</html>

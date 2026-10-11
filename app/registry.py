@@ -35,6 +35,14 @@ def register_source(source_id: int, folder: str) -> None:
         _save(state)
 
 
+def sources() -> list[tuple[int, str]]:
+    """All registered ``(source_id, folder)`` pairs, ordered by folder name."""
+    return sorted(
+        ((int(sid), folder) for sid, folder in _load()["sources"].items()),
+        key=lambda pair: pair[1],
+    )
+
+
 def folder_of(source_id: int) -> str | None:
     return _load()["sources"].get(str(source_id))
 

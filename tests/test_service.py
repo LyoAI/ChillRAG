@@ -13,6 +13,7 @@ from fastapi.testclient import TestClient
 
 from app import auth, jobs, registry
 from app.main import create_app
+from chillrag.rag_tool import source_id_for
 from app.routes import asset_file, answer as answer_route
 
 PASSWORD = "correct horse"
@@ -243,3 +244,13 @@ def test_upload_during_ingest_reruns_the_folder():
     finally:
         release.set()
         monkey.undo()
+
+
+def test_ui_page_and_source_list(client):
+    page = client.get("/")
+    assert page.status_code == 200
+    assert "post-answer" in page.text and "ChillRAG" in page.text
+    login(client)
+    client.put("/space/api/service/asset-file/resource", json={"resourceName": "bank-ui"})
+    listing = client.get("/space/api/service/asset-file/resource").json()["data"]
+    assert {"sourceId": source_id_for("bank-ui"), "resourceName": "bank-ui"} in listing

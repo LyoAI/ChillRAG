@@ -12,7 +12,7 @@ from fastapi.responses import JSONResponse
 
 from app import auth
 from app.responses import fail
-from app.routes import answer, asset_file, passport, recall
+from app.routes import answer, asset_file, passport, recall, ui
 from chillrag.corpus import CorpusManager
 
 
@@ -33,7 +33,7 @@ def create_app(auth_config: auth.AuthConfig | None = None) -> FastAPI:
         # Same envelope as success responses, so clients parse one shape.
         return fail(exc.status_code, str(exc.detail))
 
-    for router in (passport.router, asset_file.router, recall.router, answer.router):
+    for router in (passport.router, asset_file.router, recall.router, answer.router, ui.router):
         app.include_router(router)
 
     @app.get("/healthz")
