@@ -1,16 +1,21 @@
 """Web UI: a self-contained question-answering page served by the service.
 
-Independent of the vendor-protocol routers — it adds only a page route and one
-list-sources endpoint for its dropdown, and nothing else depends on them.
+Independent of the vendor-protocol routers — it adds a page route, a
+list-sources endpoint and a streaming chat endpoint, and nothing else depends
+on them.
 """
 
+import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
+from pydantic import BaseModel
+from starlette.concurrency import run_in_threadpool
 
 from app import registry
 from app.auth import require_user
+from app.corpus import attached_tool
 from app.responses import ok
 
 router = APIRouter()
@@ -27,3 +32,44 @@ def index() -> FileResponse:
 def list_sources():
     """UI-support extension (the vendor protocol has no list endpoint)."""
     return ok([{"sourceId": sid, "resourceName": folder} for sid, folder in registry.sources()])
+
+
+class ChatBody(BaseModel):
+    question: str
+    source_id: int
+    instructions: str | None = None
+    output_instruction: str | None = None
+    lang: str = ""
+
+
+def _payload(event) -> dict:
+    return {
+        "type": event.kind,
+        "tool": event.tool_name,
+        "args": event.tool_args,
+        "text": event.text,
+        "answer": event.answer,
+        "num_tool_calls": event.num_tool_calls,
+        "terminated": event.terminated,
+        "message": event.message,
+    }
+
+
+@router.post("/api/chat/stream", dependencies=[Depends(require_user)])
+async def chat_stream(body: ChatBody):
+    """Stream one answer as JSON SSE events: tool → delta… → done/error."""
+    tool = await run_in_threadpool(attached_tool, [body.source_id])
+
+    async def events():
+        try:
+            async for event in tool.answer_stream(
+                body.question,
+                instructions=body.instructions,
+                output_instruction=body.output_instruction,
+                lang=body.lang,
+            ):
+                yield f"data: {json.dumps(_payload(event), ensure_ascii=False)}\n\n"
+        except Exception as exc:  # surface as an event so the client stays in sync
+            yield f"data: {json.dumps({'type': 'error', 'message': str(exc)}, ensure_ascii=False)}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")

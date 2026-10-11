@@ -5,7 +5,7 @@ from Crypto.Hash import SHA256
 from Crypto.PublicKey import RSA
 from Crypto.Signature import PKCS1_v1_5
 from urllib.parse import urlencode
-from .base import LLMProvider, LLMResponse, ToolCallRequest
+from .base import LLMProvider, LLMResponse, StreamChunk, ToolCallRequest
 from chillrag.config import LLM_TIMEOUT_S
 from chillrag.utils import get_logger
 import base64
@@ -243,3 +243,22 @@ class PingAnLLMProvider(LLMProvider):
     def get_default_model(self) -> str:
         """Return the default model id."""
         return self.default_model
+
+    async def astream(
+        self,
+        messages: List[Dict[str, Any]],
+        tools: List[Dict[str, Any]] | None = None,
+        model: Optional[str] = None,
+        max_completion_tokens: Optional[int] = 4096,
+        temperature: Optional[float] = 0.7,
+    ):
+        """Fallback stream: one chunk from ``ainvoke`` (no token-level streaming)."""
+        resp = await self.ainvoke(
+            messages, tools=tools, model=model,
+            max_completion_tokens=max_completion_tokens, temperature=temperature,
+        )
+        yield StreamChunk(
+            content=resp.content or "",
+            tool_calls=resp.tool_calls,
+            finish_reason=resp.finish_reason,
+        )

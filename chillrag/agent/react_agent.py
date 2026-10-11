@@ -58,6 +58,24 @@ class AgentResult:
     messages: list[dict[str, Any]] = field(default_factory=list)  # full transcript
 
 
+@dataclass
+class AgentEvent:
+    """One event emitted by a streamed episode.
+
+    ``kind``: "tool" (a tool call ran), "delta" (a slice of the answer),
+    "done" (finished) or "error".
+    """
+
+    kind: str
+    tool_name: str = ""
+    tool_args: dict[str, Any] = field(default_factory=dict)
+    text: str = ""
+    answer: str = ""
+    num_tool_calls: int = 0
+    terminated: str = ""
+    message: str = ""
+
+
 class ReActAgent:
     """Native tool-calling agent loop over an ``LLM`` facade + ``ToolRegistry``."""
 
@@ -192,6 +210,89 @@ class ReActAgent:
             total_tokens=total_tokens,
             terminated=terminated,
             messages=messages,
+        )
+
+    async def arun_stream(self, question: str):
+        """Run one episode, yielding :class:`AgentEvent` as it progresses.
+
+        Tool calls are emitted as they execute; the answer is emitted as a run
+        of "delta" events (so a caller renders it incrementally) then "done".
+        """
+        messages: list[dict[str, Any]] = [
+            {"role": "system", "content": self.system_prompt},
+            {
+                "role": "user",
+                "content": self.user_prompt(question)
+                if self.user_prompt
+                else build_user_prompt(question),
+            },
+        ]
+        num_tool_calls = 0
+        terminated = "answer"
+        tools = self.tools.definitions()
+        answer = ""
+
+        while True:
+            content_parts: list[str] = []
+            round_tool_calls: list[ToolCallRequest] = []
+            finish = "stop"
+            async for chunk in self.llm.astream(
+                messages,
+                tools=tools,
+                temperature=self.temperature,
+                max_completion_tokens=self.max_completion_tokens,
+            ):
+                if chunk.content:
+                    content_parts.append(chunk.content)
+                    # A tool round emits tool-call deltas (no content), so any
+                    # content here is answer text — stream it live.
+                    yield AgentEvent(kind="delta", text=chunk.content)
+                if chunk.tool_calls is not None:
+                    round_tool_calls = chunk.tool_calls
+                    finish = chunk.finish_reason
+            content = "".join(content_parts)
+
+            if finish == "error":
+                terminated = "error"
+                yield AgentEvent(kind="error", message=content or "LLM call failed")
+                break
+
+            resp = LLMResponse(content=content, tool_calls=round_tool_calls, finish_reason=finish)
+            messages.append(_assistant_message(resp))
+
+            if tools is None and round_tool_calls:
+                messages[-1].pop("tool_calls", None)
+                break
+            if not round_tool_calls:
+                answer = content
+                break
+
+            executed = round_tool_calls if self.max_tool_calls is None else round_tool_calls[
+                : max(self.max_tool_calls - num_tool_calls, 0)
+            ]
+            sem = asyncio.Semaphore(self.tool_concurrency)
+
+            async def _run_call(tc: ToolCallRequest) -> AgentTurn:
+                async with sem:
+                    return await asyncio.to_thread(self._execute_tool, tc, resp)
+
+            turns = await asyncio.gather(*(_run_call(tc) for tc in executed))
+            for tc, turn in zip(executed, turns):
+                num_tool_calls += 1
+                turn.step = num_tool_calls
+                messages.append({"role": "tool", "tool_call_id": tc.id, "content": turn.tool_result})
+                yield AgentEvent(kind="tool", tool_name=turn.tool_name, tool_args=turn.tool_args)
+
+            if self.max_tool_calls is not None and (
+                num_tool_calls >= self.max_tool_calls or len(executed) < len(round_tool_calls)
+            ):
+                messages[-1]["tool_calls"] = [_tool_call_dict(tc) for tc in executed]
+                tools = None
+                messages.append({"role": "user", "content": self.force_answer_msg})
+                terminated = "max_tool_calls"
+
+        yield AgentEvent(
+            kind="done", answer=answer, num_tool_calls=num_tool_calls, terminated=terminated
         )
 
     def _execute_tool(self, tc: ToolCallRequest, resp: LLMResponse) -> AgentTurn:

@@ -78,6 +78,18 @@ class LLM:
             messages, tools=tools, model=kwargs.pop("model", self.model), **kwargs
         )
 
+    async def astream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        **kwargs: Any,
+    ):
+        """Async-generate streamed completion chunks; ``model`` overridable."""
+        async for chunk in self.provider.astream(
+            messages, tools=tools, model=kwargs.pop("model", self.model), **kwargs
+        ):
+            yield chunk
+
     def get_default_model(self) -> str:
         return self.model
 

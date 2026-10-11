@@ -243,8 +243,31 @@ def test_upload_during_ingest_reruns_the_folder():
 def test_ui_page_and_source_list(client):
     page = client.get("/")
     assert page.status_code == 200
-    assert "post-answer" in page.text and "ChillRAG" in page.text
+    assert "/api/chat/stream" in page.text and "ChillRAG" in page.text
     login(client)
     client.put("/space/api/service/asset-file/resource", json={"resourceName": "bank-ui"})
     listing = client.get("/space/api/service/asset-file/resource").json()["data"]
     assert {"sourceId": source_id_for("bank-ui"), "resourceName": "bank-ui"} in listing
+
+
+def test_chat_stream_emits_json_events(client, monkeypatch):
+    from chillrag.agent.react_agent import AgentEvent
+
+    async def fake_stream(question, **kwargs):
+        yield AgentEvent(kind="tool", tool_name="search", tool_args={"query": "q"})
+        yield AgentEvent(kind="delta", text="the answer is ")
+        yield AgentEvent(kind="delta", text="42")
+        yield AgentEvent(kind="done", answer="the answer is 42", num_tool_calls=1, terminated="answer")
+
+    class FakeTool:
+        def answer_stream(self, question, **kwargs):
+            return fake_stream(question, **kwargs)
+
+    monkeypatch.setattr("app.routes.ui.attached_tool", lambda ids: FakeTool())
+    login(client)
+    with client.stream("POST", "/api/chat/stream", json={"question": "q", "source_id": 1}) as resp:
+        assert resp.status_code == 200
+        body = "".join(resp.iter_text())
+    assert '"type": "tool"' in body and '"tool": "search"' in body
+    assert '"type": "delta"' in body and '"text": "42"' in body
+    assert '"type": "done"' in body

@@ -31,6 +31,19 @@ class LLMResponse:
         return len(self.tool_calls) > 0
 
 
+@dataclass
+class StreamChunk:
+    """One piece of a streamed completion.
+
+    ``content`` is a text delta (empty on a tool-call round). ``tool_calls`` is
+    ``None`` mid-stream and set to the round's accumulated tool calls on the
+    final chunk, where ``finish_reason`` is also meaningful.
+    """
+    content: str = ""
+    tool_calls: list[ToolCallRequest] | None = None
+    finish_reason: str = "stop"
+
+
 class LLMProvider(ABC):
     """
     Abstract base class for LLM providers.
@@ -104,6 +117,21 @@ class LLMProvider(ABC):
         
         Returns:
             LLMResponse with content and/or tool calls.
+        """
+        pass
+
+    @abstractmethod
+    def astream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        max_completion_tokens: int = 4096,
+        temperature: float = 0.7,
+    ):
+        """Async-generate streamed completion chunks (see ``StreamChunk``).
+
+        Providers that cannot stream fall back to one chunk from ``ainvoke``.
         """
         pass
 

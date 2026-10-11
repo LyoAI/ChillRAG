@@ -15,7 +15,7 @@ from openai import AsyncOpenAI, OpenAI
 
 from chillrag.config import LLM_TIMEOUT_S
 from chillrag.utils import get_logger
-from .base import LLMProvider, LLMResponse, ToolCallRequest
+from .base import LLMProvider, LLMResponse, StreamChunk, ToolCallRequest
 
 logger = get_logger()
 
@@ -135,6 +135,59 @@ class OpenAICompatProvider(LLMProvider):
         except Exception as e:
             logger.error("Error invoking LLM: %s", e)
             return LLMResponse(content=None, finish_reason="error", error=str(e))
+
+    async def astream(
+        self,
+        messages: list[dict[str, Any]],
+        tools: list[dict[str, Any]] | None = None,
+        model: str | None = None,
+        max_completion_tokens: int = 4096,
+        temperature: float = 0.7,
+        response_format: dict[str, Any] | None = None,
+    ):
+        """Stream content deltas, then a final chunk with the round's tool calls.
+
+        Tool-call arguments arrive in fragments across chunks and are
+        reassembled by tool-call index into the final ``StreamChunk``.
+        """
+        try:
+            kwargs = self._build_kwargs(
+                messages, tools, model, max_completion_tokens, temperature, response_format
+            )
+            kwargs["stream"] = True
+            stream = await self.async_client.chat.completions.create(**kwargs)
+            acc: dict[int, dict[str, str]] = {}
+            finish = "stop"
+            async for chunk in stream:
+                if not chunk.choices:
+                    continue
+                choice = chunk.choices[0]
+                delta = choice.delta
+                if delta and delta.content:
+                    yield StreamChunk(content=delta.content)
+                if delta and getattr(delta, "tool_calls", None):
+                    for tc in delta.tool_calls:
+                        slot = acc.setdefault(tc.index, {"id": "", "name": "", "args": ""})
+                        if tc.id:
+                            slot["id"] = tc.id
+                        if tc.function and tc.function.name:
+                            slot["name"] = tc.function.name
+                        if tc.function and tc.function.arguments:
+                            slot["args"] += tc.function.arguments
+                if choice.finish_reason:
+                    finish = choice.finish_reason
+            tool_calls = [
+                ToolCallRequest(
+                    id=acc[i]["id"],
+                    name=acc[i]["name"],
+                    arguments=self._parse_arguments(acc[i]["args"]),
+                )
+                for i in sorted(acc)
+            ]
+            yield StreamChunk(tool_calls=tool_calls, finish_reason=finish)
+        except Exception as e:
+            logger.error("Error streaming LLM: %s", e)
+            yield StreamChunk(tool_calls=[], finish_reason="error")
 
     def get_default_model(self) -> str:
         return self.default_model

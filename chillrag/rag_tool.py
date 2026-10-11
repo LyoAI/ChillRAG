@@ -625,6 +625,44 @@ class RAGTool:
         )
         return result.answer
 
+    async def answer_stream(
+        self,
+        question: str,
+        source_id_list: Iterable[int] = (),
+        *,
+        instructions: str | None = None,
+        output_instruction: str | None = None,
+        lang: str = "",
+    ):
+        """Answer ``question`` incrementally, yielding the agent's events.
+
+        Mirrors :meth:`answer_by_question` in agent mode, but streams: a "tool"
+        event after each tool call, then "delta" slices of the answer and a
+        "done" event. Async end to end (no ``asyncio.run``), so it is safe under
+        an ASGI server.
+        """
+        from chillrag.agent import ReActAgent
+        from chillrag.agent.prompts import build_user_prompt
+        from chillrag.tools import ToolRegistry
+
+        bundle = self._resolve_bundle(source_id_list)
+        registry = ToolRegistry(
+            self._manager.searchers(bundle.folder),
+            bundle.store,
+            top_k=SEARCH_TOP_K,
+            snippet_max_tokens=SNIPPET_MAX_TOKENS,
+        )
+        agent = ReActAgent(
+            _get_llm(),
+            registry,
+            max_tool_calls=MAX_TOOL_CALLS,
+            instructions=instructions,
+            lang=lang,
+            user_prompt=lambda q: build_user_prompt(q, output_instruction),
+        )
+        async for event in agent.arun_stream(question):
+            yield event
+
     def _answer_oneshot(
         self,
         bundle: CorpusBundle,
