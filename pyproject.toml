@@ -1,0 +1,89 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "chillrag"
+version = "0.1.0"
+description = "Local document retrieval and question answering service"
+readme = "README.md"
+requires-python = ">=3.11"
+
+# Flat on purpose, matching the sibling benchmark repo (FinSearch-Bench): one
+# `uv sync` has to produce a complete runtime on the intranet host, where there
+# is no reachable package index to fetch a narrowly-chosen extra from.
+dependencies = [
+    # Service plumbing.
+    "pydantic>=2",
+    "python-dotenv",
+    "colorlog",
+    "numpy",
+    "openai>=1",
+
+    # Dense retrieval: sentence-transformers + the faiss index.
+    "sentence-transformers>=5.7.0",
+    "faiss-cpu",
+
+    # Lexical BM25 over a Lucene index (needs a JVM at run time).
+    "pyserini>=1.6.0",
+
+    # Document parsing via the local MinerU CLI.
+    #
+    # The `pipeline` extra installs the offline backend's own dependencies
+    # (onnxruntime, pyclipper, shapely, torch, ...), which this deployment needs
+    # and cannot download later.
+    #
+    # `<4` is the load-bearing half, and it has to be written out. 4.x renamed
+    # its extras to `all`/`dev`/`full`/`test`/`torch` and dropped `pipeline`, but
+    # that does *not* hold resolution back on its own -- uv only warns ("does not
+    # have an extra named `pipeline`") and installs 4.x anyway. And 4.x is a
+    # different program: `mineru parse <path>` with
+    # `--tier flash|basic|standard|advanced`, where the tier is "decided by the
+    # server" (a hosted service, unusable on an intranet), and `-p` meaning
+    # `--pages`. It has no `-o`, `-b` or `-l`. The parser here drives the 3.x
+    # interface (`mineru -p <file> -o <dir> -b <backend> -l <lang>`), which 4.x
+    # rejects outright.
+    "mineru[pipeline]>=3.4.4,<4",
+    # MinerU leaves torchvision unpinned; this floor is the version the
+    # reference environment resolved against its torch.
+    "torchvision>=0.28.0",
+
+    # The xlsx side of the parse stage, and MinerU's progress display.
+    "openpyxl",
+    "rich",
+
+    # Intranet gateway provider (PingAn): request signing.
+    "pycryptodome>=3.23.0",
+]
+
+# Test tooling is a dependency *group*, not an extra, so it survives a plain
+# `uv sync`. A deployment that only serves requests can drop it with
+# `uv sync --no-dev`.
+[dependency-groups]
+dev = [
+    "pytest>=9.1.1",
+]
+
+# `chillrag*`, not `chillrag`. The pattern is fnmatch, so the bare name matches only
+# the top-level package and drops every subpackage -- chillrag.llm, chillrag.tools.*,
+# chillrag.agent, chillrag.utils -- from a wheel build, leaving it unimportable.
+# An editable install maps the top-level package to the source directory and is
+# unaffected either way.
+[tool.setuptools.packages.find]
+include = ["chillrag*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+# Resolve for every platform this is run on, not only the one that happens to
+# write the lockfile: macOS for development, Linux for the intranet host, Windows
+# for the desktop. Without the list uv resolves for the *current* platform, so a
+# lock built on one of them carries no wheels for the others and `uv sync` there
+# falls back to building from source -- which pyserini, faiss and torch do not
+# survive.
+[tool.uv]
+environments = [
+    "sys_platform == 'darwin'",
+    "sys_platform == 'linux'",
+    "sys_platform == 'win32'",
+]

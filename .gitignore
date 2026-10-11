@@ -1,0 +1,25 @@
+# Secrets and machine-local configuration
+.env
+
+# Corpus inputs and every derived artifact (chunks, md, bm25, faiss)
+materials/
+.cache/
+# Real model configs are machine-local; the committed *.example.yaml are templates.
+config/llm/*.yaml
+!config/llm/*.example.yaml
+
+# Probe dumps from the vendor-interface investigation
+scripts/probe_out/
+scripts/probe_raw/
+
+__pycache__/
+*.py[cod]
+.DS_Store
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+
+.env
+config/
