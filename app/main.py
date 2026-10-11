@@ -6,9 +6,11 @@ and ingest status are per process, and the embedder is loaded once per process.
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
 
 from app import auth
 from app.responses import fail
@@ -35,6 +37,9 @@ def create_app(auth_config: auth.AuthConfig | None = None) -> FastAPI:
 
     for router in (passport.router, asset_file.router, recall.router, answer.router, ui.router):
         app.include_router(router)
+
+    # Vendored JS (markdown rendering) for the web UI, served offline.
+    app.mount("/static", StaticFiles(directory=Path(__file__).parent / "static"), name="static")
 
     @app.get("/healthz")
     def healthz() -> dict:

@@ -39,7 +39,7 @@
 
   /* ================= sidebar ================= */
   .sidebar {
-    width: 264px; flex: none; background: var(--sidebar);
+    width: 300px; flex: none; background: var(--sidebar);
     border-right: 1px solid var(--line); display: flex; flex-direction: column;
     padding: 18px 14px; gap: 14px;
   }
@@ -87,7 +87,7 @@
   }
   #source:focus { outline: none; border-color: var(--sage); }
   .convo { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-  .convo-inner { max-width: 820px; margin: 0 auto; padding: 26px 24px 20px; }
+  .convo-inner { max-width: 840px; margin: 0 auto; padding: 26px 24px 20px; }
 
   .empty { text-align: center; color: var(--muted); padding: 12vh 20px 0; }
   .empty .flake {
@@ -126,6 +126,34 @@
     font: 12.5px/1.5 var(--mono); background: var(--panel-2); border: 1px solid var(--line);
     border-radius: 6px; padding: 1px 5px;
   }
+  .msg.ai .bubble a { color: var(--sage-deep); text-decoration: underline; text-underline-offset: 2px; }
+  .msg.ai .bubble a:hover { color: var(--dusk); }
+  .msg.ai .bubble h1, .msg.ai .bubble h2, .msg.ai .bubble h3, .msg.ai .bubble h4 {
+    font-weight: 650; margin: 16px 0 8px; line-height: 1.4;
+  }
+  .msg.ai .bubble h1 { font-size: 1.3em; }
+  .msg.ai .bubble h2 { font-size: 1.18em; }
+  .msg.ai .bubble h3 { font-size: 1.05em; }
+  .msg.ai .bubble ul, .msg.ai .bubble ol { margin: 8px 0; padding-left: 22px; }
+  .msg.ai .bubble li { margin: 3px 0; }
+  .msg.ai .bubble pre {
+    background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+    padding: 12px 14px; overflow-x: auto; font: 12.5px/1.55 var(--mono); margin: 10px 0;
+  }
+  .msg.ai .bubble pre code { background: none; border: none; padding: 0; }
+  .msg.ai .bubble blockquote {
+    border-left: 3px solid var(--sage); margin: 10px 0; padding: 2px 0 2px 14px; color: var(--muted);
+  }
+  .msg.ai .bubble hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+  .msg.ai .bubble table {
+    border-collapse: collapse; margin: 12px 0; font-size: 13px;
+    display: block; overflow-x: auto; white-space: nowrap; max-width: 100%;
+  }
+  .msg.ai .bubble th, .msg.ai .bubble td {
+    border: 1px solid var(--line); padding: 6px 12px; text-align: left;
+  }
+  .msg.ai .bubble th { background: var(--panel-2); font-weight: 650; }
+  .msg.ai .bubble tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
   .msg.ai .status {
     font: 12px var(--mono); color: var(--faint); margin: 0 0 7px 0; min-height: 0;
     transition: opacity .2s; letter-spacing: .02em;
@@ -143,7 +171,7 @@
   /* ================= composer ================= */
   .dock { flex: none; border-top: 1px solid var(--line); padding: 16px 22px 20px;
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); }
-  .composer { max-width: 820px; margin: 0 auto; }
+  .composer { max-width: 840px; margin: 0 auto; }
   .box {
     display: flex; align-items: flex-end; gap: 10px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 12px 18px;
@@ -257,6 +285,8 @@
   </div>
 </div>
 
+<script src="/static/vendor/marked.min.js"></script>
+<script src="/static/vendor/purify.min.js"></script>
 <script>
 "use strict";
 const $ = (id) => document.getElementById(id);
@@ -489,6 +519,9 @@ function escapeHtml(s) {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 function render(text) {
+  if (window.marked && window.DOMPurify) {
+    return DOMPurify.sanitize(marked.parse(text, { breaks: true }));
+  }
   return escapeHtml(text)
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
