@@ -633,13 +633,14 @@ class RAGTool:
         instructions: str | None = None,
         output_instruction: str | None = None,
         lang: str = "",
+        history: list[dict] | None = None,
     ):
         """Answer ``question`` incrementally, yielding the agent's events.
 
         Mirrors :meth:`answer_by_question` in agent mode, but streams: a "tool"
         event after each tool call, then "delta" slices of the answer and a
         "done" event. Async end to end (no ``asyncio.run``), so it is safe under
-        an ASGI server.
+        an ASGI server. ``history`` is prior user/assistant turns (multi-turn).
         """
         from chillrag.agent import ReActAgent
         from chillrag.agent.prompts import build_user_prompt
@@ -660,7 +661,7 @@ class RAGTool:
             lang=lang,
             user_prompt=lambda q: build_user_prompt(q, output_instruction),
         )
-        async for event in agent.arun_stream(question):
+        async for event in agent.arun_stream(question, history=history):
             yield event
 
     def _answer_oneshot(

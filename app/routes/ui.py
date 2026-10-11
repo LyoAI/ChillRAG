@@ -40,6 +40,7 @@ class ChatBody(BaseModel):
     instructions: str | None = None
     output_instruction: str | None = None
     lang: str = ""
+    history: list[dict] = []
 
 
 def _payload(event) -> dict:
@@ -67,6 +68,7 @@ async def chat_stream(body: ChatBody):
                 instructions=body.instructions,
                 output_instruction=body.output_instruction,
                 lang=body.lang,
+                history=body.history,
             ):
                 yield f"data: {json.dumps(_payload(event), ensure_ascii=False)}\n\n"
         except Exception as exc:  # surface as an event so the client stays in sync

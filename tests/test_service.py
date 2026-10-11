@@ -271,3 +271,23 @@ def test_chat_stream_emits_json_events(client, monkeypatch):
     assert '"type": "tool"' in body and '"tool": "search"' in body
     assert '"type": "delta"' in body and '"text": "42"' in body
     assert '"type": "done"' in body
+
+
+def test_chat_stream_forwards_history(client, monkeypatch):
+    from chillrag.agent.react_agent import AgentEvent
+    captured = {}
+
+    class FakeTool:
+        def answer_stream(self, question, **kwargs):
+            captured.update(kwargs)
+            async def gen():
+                yield AgentEvent(kind="done", answer="ok")
+            return gen()
+
+    monkeypatch.setattr("app.routes.ui.attached_tool", lambda ids: FakeTool())
+    login(client)
+    history = [{"role": "user", "content": "Q1"}, {"role": "assistant", "content": "A1"}]
+    with client.stream("POST", "/api/chat/stream", json={"question": "Q2", "source_id": 1, "history": history}) as resp:
+        assert resp.status_code == 200
+        "".join(resp.iter_text())
+    assert captured["history"] == history

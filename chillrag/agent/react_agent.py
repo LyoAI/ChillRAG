@@ -121,21 +121,25 @@ class ReActAgent:
         """Sync convenience wrapper around the async loop."""
         return asyncio.run(self.arun(question))
 
-    async def arun(self, question: str) -> AgentResult:
+    async def arun(
+        self, question: str, history: list[dict[str, Any]] | None = None
+    ) -> AgentResult:
         """Run one episode for ``question``.
 
-        Awaitable so a batch of independent episodes can run concurrently over
-        the shared async client.
+        ``history`` is prior user/assistant turns to prepend (multi-turn chat);
+        each is ``{"role": "user"|"assistant", "content": str}``.
         """
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt},
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
+        for turn in history or []:
+            messages.append({"role": turn["role"], "content": turn["content"]})
+        messages.append(
             {
                 "role": "user",
                 "content": self.user_prompt(question)
                 if self.user_prompt
                 else build_user_prompt(question),
-            },
-        ]
+            }
+        )
         trajectory: list[AgentTurn] = []
         total_tokens = 0
         num_tool_calls = 0
@@ -212,21 +216,26 @@ class ReActAgent:
             messages=messages,
         )
 
-    async def arun_stream(self, question: str):
+    async def arun_stream(
+        self, question: str, history: list[dict[str, Any]] | None = None
+    ):
         """Run one episode, yielding :class:`AgentEvent` as it progresses.
 
         Tool calls are emitted as they execute; the answer is emitted as a run
         of "delta" events (so a caller renders it incrementally) then "done".
+        ``history`` is prior user/assistant turns to prepend (multi-turn chat).
         """
-        messages: list[dict[str, Any]] = [
-            {"role": "system", "content": self.system_prompt},
+        messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
+        for turn in history or []:
+            messages.append({"role": turn["role"], "content": turn["content"]})
+        messages.append(
             {
                 "role": "user",
                 "content": self.user_prompt(question)
                 if self.user_prompt
                 else build_user_prompt(question),
-            },
-        ]
+            }
+        )
         num_tool_calls = 0
         terminated = "answer"
         tools = self.tools.definitions()
