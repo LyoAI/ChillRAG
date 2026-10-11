@@ -1,8 +1,9 @@
 """Background ingest: one worker, one job per folder, status polled by clients.
 
 Ingest is parse → chunk → embed → index, which takes minutes, so an upload only
-writes the file and queues the folder. A folder with a job already queued or
-running is not queued twice.
+writes the file and queues the folder. An upload arriving while the folder is
+already ingesting marks it dirty: that pass ends with an incomplete file set, so
+the job re-runs until it sees a stable folder.
 """
 
 import logging
@@ -17,11 +18,13 @@ logger = logging.getLogger("chillrag.jobs")
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")
 _LOCK = threading.Lock()
 _STATUS: dict[str, str] = {}  # folder -> "processing" | "finish" | "failed"
+_DIRTY: set[str] = set()
 
 
 def submit(folder: str) -> None:
     with _LOCK:
         if _STATUS.get(folder) == "processing":
+            _DIRTY.add(folder)
             return
         _STATUS[folder] = "processing"
     _POOL.submit(_run, folder)
@@ -29,7 +32,13 @@ def submit(folder: str) -> None:
 
 def _run(folder: str) -> None:
     try:
-        RAGTool().upload_file_complete(folder)
+        while True:
+            with _LOCK:
+                _DIRTY.discard(folder)
+            RAGTool().upload_file_complete(folder)
+            with _LOCK:
+                if folder not in _DIRTY:
+                    break
         outcome = "finish"
     except Exception:
         logger.exception("ingest failed for folder %r", folder)

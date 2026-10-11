@@ -206,3 +206,40 @@ def test_post_answer_rejects_more_than_one_source(client):
                            json={"question": "q", "source_category_filter": filter_json})
     assert response.status_code == 400
     assert response.json()["msg"] == "post-answer takes exactly one source"
+
+
+def test_upload_during_ingest_reruns_the_folder():
+    """An upload arriving mid-ingest must re-queue: the running pass snapshots
+    an incomplete file set, so its store would silently miss the new files."""
+    import threading
+    from app import jobs as jobs_mod
+
+    calls = []
+    entered = threading.Event()
+    release = threading.Event()
+
+    class BlockingTool:
+        def upload_file_complete(self, folder):
+            calls.append(folder)
+            entered.set()
+            release.wait(timeout=5)
+            return None
+
+    monkey = pytest.MonkeyPatch()
+    monkey.setattr(jobs_mod, "RAGTool", BlockingTool)
+    monkey.setattr(jobs_mod, "_STATUS", {})
+    monkey.setattr(jobs_mod, "_DIRTY", set())
+    try:
+        jobs_mod.submit("f")            # first pass starts, blocks inside
+        assert entered.wait(timeout=5)
+        jobs_mod.submit("f")            # upload while processing -> dirty
+        release.set()                   # let the first pass finish
+        for _ in range(100):            # wait for the re-run
+            if len(calls) >= 2:
+                break
+            time.sleep(0.02)
+        assert calls == ["f", "f"]
+        assert jobs_mod.status("f") == "finish"
+    finally:
+        release.set()
+        monkey.undo()
