@@ -148,6 +148,10 @@
           justify-content: center; background:
             radial-gradient(1000px 500px at 20% -10%, rgba(109,155,255,.13), transparent 60%),
             radial-gradient(800px 500px at 90% 110%, rgba(124,224,255,.10), transparent 60%), var(--bg); }
+  /* `#gate` sets display:flex above, which would otherwise override the `hidden`
+     attribute (UA display:none loses to author rules) and leave the gate stuck
+     on screen after sign-in. */
+  #gate[hidden] { display: none; }
   .gate-card {
     width: min(360px, calc(100vw - 40px)); background: var(--surface);
     border: 1px solid var(--line); border-radius: 18px; padding: 30px 28px 26px;
@@ -265,7 +269,7 @@ async function signIn() {
   }
   if (body.data && body.data.userId != null) {
     $("who").hidden = false;
-    $("who").textContent = "<span class='dot'></span>user " + body.data.userId;
+    $("who").innerHTML = "<span class='dot'></span>user " + body.data.userId;
   }
   if (await loadSources()) {
     $("gate").hidden = true;
