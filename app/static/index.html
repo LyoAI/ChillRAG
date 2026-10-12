@@ -92,7 +92,11 @@
   }
   #source:focus { outline: none; border-color: var(--sage); }
   .convo { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-  .convo-inner { width: 100%; margin: 0 auto; padding: 28px 48px 20px; }
+  /* Reading column: fills the viewport on a narrow screen, stops widening once
+     a line would exceed a comfortable measure. The first max-width is the
+     fallback for a browser without clamp(). */
+  .convo-inner { width: 100%; max-width: 900px; max-width: clamp(680px, 58vw, 1000px);
+                 margin: 0 auto; padding: 28px clamp(16px, 3vw, 48px) 20px; }
 
   .empty { text-align: center; color: var(--muted); padding: 12vh 20px 0; }
   .empty .flake {
@@ -184,7 +188,7 @@
   /* ================= composer ================= */
   .dock { flex: none; border-top: 1px solid var(--line); padding: 16px 48px 20px;
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); }
-  .composer { width: 100%; margin: 0 auto; }
+  .composer { width: 100%; max-width: 900px; max-width: clamp(680px, 58vw, 1000px); margin: 0 auto; }
   .box {
     display: flex; align-items: flex-end; gap: 10px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 12px 18px;
