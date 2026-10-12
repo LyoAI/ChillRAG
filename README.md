@@ -11,7 +11,7 @@ clients only change their base URL.
 
 ```bash
 uv sync
-# accounts: create users.yaml (gitignored) — see Accounts below
+uv run python -m app.users add alice --role admin    # accounts, see below
 uv run uvicorn app.main:create_app --factory --workers 1 --host 0.0.0.0 --port 9022
 ```
 
@@ -20,22 +20,34 @@ process.
 
 ## Accounts
 
-Login uses a gitignored `users.yaml` at the repo root:
+Accounts live in a gitignored `users.yaml` at the repo root, managed with the CLI:
+
+```bash
+uv run python -m app.users add alice --role admin   # prints a generated password
+uv run python -m app.users list
+uv run python -m app.users passwd alice             # or --password to choose one
+uv run python -m app.users remove alice
+```
+
+`admin` manages sources; `user` asks and retrieves. The file is plain text, so
+editing it directly works too — the running service notices either way at the
+next login, no restart:
 
 ```yaml
 users:
   alice:
-    password: "change-me"     # single-quote if it has # $ @ etc.
-    role: admin               # admin manages sources; user asks and retrieves
+    password: "change-me"     # quote it if it has # $ @ etc.
+    role: admin
   bob:
     password: "..."
     role: user
 ```
 
-Edits take effect on restart. Without the file, a single admin account falls
-back to `CHILLRAG_USER` / `CHILLRAG_PASSWORD`. Tokens are signed with
-`CHILLRAG_AUTH_SECRET`, or a secret auto-generated under the cache dir, so
-restarts keep sessions.
+Without the file, a single admin account falls back to `CHILLRAG_USER` /
+`CHILLRAG_PASSWORD`. Tokens are signed with `CHILLRAG_AUTH_SECRET`, or a secret
+auto-generated under the cache dir, so restarts keep sessions. A new password
+does not end sessions already issued (they run 12 h); removing the account, or
+changing the secret, does.
 
 ## Configure
 

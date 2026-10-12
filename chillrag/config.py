@@ -38,8 +38,8 @@ REPO_ROOT = PACKAGE_ROOT.parent
 load_dotenv(REPO_ROOT / ".env")
 
 
-def _path(variable: str, default: Path) -> Path:
-    """Resolve one path knob: ``~`` expanded, relative values anchored here.
+def resolve_path(raw: str, default: Path) -> Path:
+    """Resolve one path value: ``~`` expanded, a relative value anchored here.
 
     Anchoring is what makes this package importable from another project. A
     relative value in ``.env`` (``./materials``) would otherwise be resolved by
@@ -50,11 +50,16 @@ def _path(variable: str, default: Path) -> Path:
     An empty value counts as unset, so a commented-out line in ``.env`` leaves
     the default in place.
     """
-    raw = os.getenv(variable, "").strip()
+    raw = (raw or "").strip()
     if not raw:
         return default
     path = Path(raw).expanduser()
     return path if path.is_absolute() else REPO_ROOT / path
+
+
+def _path(variable: str, default: Path) -> Path:
+    """One path knob from the environment (see ``resolve_path``)."""
+    return resolve_path(os.getenv(variable, ""), default)
 
 
 # ---- Storage roots -------------------------------------------------------
