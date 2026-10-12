@@ -1,0 +1,592 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>ChillRAG · API console</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(%23g)"/><g stroke="%23ffffff" stroke-width="9" stroke-linecap="round"><path d="M50 22v56"/><path d="M26.5 35.5l47 29"/><path d="M26.5 64.5l47-29"/></g></svg>'>
+<style>
+  :root {
+    --bg: #efede8; --panel: #f8f6f2; --panel-2: #f2efe9; --ink: #3b3732;
+    --muted: #7c766c; --faint: #a39c91; --line: #ddd8cf;
+    --sage: #93a88e; --sage-deep: #7d9578; --dusk: #8aa2b0; --clay: #c2a08a;
+    --err: #b96a5f; --ok: #7d9578;
+    --shadow: 0 1px 2px rgba(70,60,50,.05), 0 8px 28px rgba(70,60,50,.07);
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #24211d; --panel: #2b2823; --panel-2: #312d28; --ink: #e9e4dc;
+            --muted: #a49c90; --faint: #6f685e; --line: #3a352e;
+            --sage: #9db39a; --sage-deep: #aac0a6; --dusk: #9bb3c0; --clay: #c9a892;
+            --err: #d08a7c; --ok: #9db39a;
+            --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.35); }
+  }
+  * { box-sizing: border-box; margin: 0; }
+  body { background: var(--bg); color: var(--ink); font: 14.5px/1.7 var(--sans);
+         -webkit-font-smoothing: antialiased; padding-bottom: 80px; }
+  code, pre, .mono { font-family: var(--mono); }
+
+  /* ---------- top bar ---------- */
+  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
+         padding: 12px 28px; border-bottom: 1px solid var(--line);
+         background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(12px); }
+  .mark { width: 30px; height: 30px; border-radius: 9px; flex: none; color: #fff; font-size: 15px;
+          line-height: 30px; text-align: center; background: linear-gradient(135deg, var(--sage), var(--dusk)); }
+  .brand { font-weight: 650; letter-spacing: .2px; }
+  .brand span { color: var(--faint); font-weight: 500; }
+  .top .spacer { flex: 1; }
+  .top select { font: 13px var(--sans); color: var(--ink); background: var(--panel);
+                border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; cursor: pointer; }
+  .top select:focus { outline: none; border-color: var(--sage); }
+  .top .who { font: 12px var(--mono); color: var(--muted); }
+  .top a, .top button.link { font: 12.5px var(--sans); color: var(--sage-deep); background: none;
+                             border: none; padding: 0; cursor: pointer; text-decoration: none; }
+  .top a:hover, .top button.link:hover { text-decoration: underline; }
+
+  main { max-width: 940px; margin: 0 auto; padding: 26px 24px 0; }
+  .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; }
+  .lede code { font-size: 12.5px; background: var(--panel-2); border: 1px solid var(--line);
+               border-radius: 5px; padding: 1px 5px; }
+
+  /* ---------- cards ---------- */
+  .card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+          padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--shadow); }
+  .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .m { font: 600 10.5px var(--mono); letter-spacing: .08em; padding: 3px 8px; border-radius: 6px;
+       color: #fff; background: var(--dusk); flex: none; }
+  .m.put { background: var(--clay); }
+  .m.get { background: var(--sage); }
+  .head code { font-size: 12.5px; color: var(--ink); word-break: break-all; }
+  .why { color: var(--muted); font-size: 13px; margin-top: 8px; }
+  .why code { font: 12px var(--mono); background: var(--panel-2); border: 1px solid var(--line);
+              border-radius: 5px; padding: 1px 5px; }
+
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+          gap: 12px; margin-top: 16px; }
+  .grid label, .field label { display: block; font: 10.5px var(--mono); letter-spacing: .1em;
+                              text-transform: uppercase; color: var(--faint); }
+  .grid input, .grid select, .field input, .field textarea, .field select {
+    width: 100%; margin-top: 5px; background: var(--panel-2); border: 1px solid var(--line);
+    border-radius: 10px; padding: 9px 12px; color: var(--ink); font: 13.5px var(--sans);
+    transition: border-color .15s, box-shadow .15s; }
+  .field textarea { font: 13px var(--mono); resize: vertical; min-height: 62px; }
+  .grid input:focus, .grid select:focus, .field input:focus, .field textarea:focus {
+    outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px rgba(147,168,142,.18); }
+  .field { margin-top: 14px; }
+  details.adv { margin-top: 14px; }
+  details.adv summary { font: 12px var(--mono); color: var(--faint); cursor: pointer; }
+
+  .row { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
+  .run { padding: 9px 20px; border: none; border-radius: 10px; cursor: pointer; color: #fff;
+         font: 600 13.5px var(--sans); background: linear-gradient(135deg, var(--sage), var(--dusk));
+         transition: filter .15s, transform .12s; }
+  .run:hover { filter: brightness(1.06); }
+  .run:active { transform: scale(.98); }
+  .run:disabled { opacity: .55; cursor: default; filter: none; }
+  .hint { font: 12px var(--mono); color: var(--faint); }
+  .out { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
+  .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
+  .pill { font: 600 11px var(--mono); padding: 3px 9px; border-radius: 999px;
+          color: #fff; background: var(--ok); }
+  .pill.bad { background: var(--err); }
+  .pill.warn { background: var(--clay); }
+  .meta .ms, .meta .ep { font: 11.5px var(--mono); color: var(--faint); }
+  pre { background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
+        padding: 12px 14px; font-size: 12.5px; line-height: 1.6; overflow: auto; max-height: 420px;
+        white-space: pre-wrap; word-break: break-word; }
+  pre.curl { color: var(--muted); }
+  details.curl { margin-top: 10px; }
+  details.curl summary { font: 11.5px var(--mono); color: var(--faint); cursor: pointer; }
+
+  table { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
+  th { text-align: left; font: 10.5px var(--mono); letter-spacing: .1em; text-transform: uppercase;
+       color: var(--faint); padding: 6px 8px; border-bottom: 1px solid var(--line); }
+  td { padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  td.num, th.num { text-align: right; font-family: var(--mono); }
+  td.snip { color: var(--muted); font-size: 12.5px; }
+  .tag { font: 11px var(--mono); color: var(--muted); }
+  .empty-row { color: var(--faint); font-size: 13px; padding: 8px 0; }
+  .err-text { color: var(--err); font-size: 13px; }
+  main > .foot { color: var(--faint); font: 11.5px var(--mono); text-align: center; padding: 26px 0 0; }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="mark">❄</div>
+  <div class="brand">ChillRAG <span>· API console</span></div>
+  <div class="spacer"></div>
+  <select id="corpus" title="Source used by the cards that need one"></select>
+  <span class="who" id="who">not signed in</span>
+  <a href="/">Chat</a>
+  <a href="/docs" target="_blank" rel="noopener">Swagger</a>
+  <button class="link" id="signout">sign out</button>
+</header>
+
+<main>
+  <p class="lede">
+    One card per endpoint, each fired exactly the way the vendor client fires it —
+    including where parameters live (query string, multipart, bare JSON array).
+    Sign in first: the page is served by the same service, so the browser holds the
+    <code>space-auth</code> cookie and sends it automatically.
+  </p>
+
+  <!-- 1 · login -->
+  <section class="card">
+    <div class="head">
+      <span class="m post">POST</span>
+      <code>/space/api/passport/login</code>
+    </div>
+    <p class="why">Exchanges credentials for the <code>space-auth</code> cookie every other
+      endpoint requires. The field is <code>passwd</code>, not <code>password</code>.</p>
+    <div class="grid">
+      <div class="field"><label for="login-user">username</label>
+        <input id="login-user" autocomplete="username" placeholder="rqa"></div>
+      <div class="field"><label for="login-pass">password</label>
+        <input id="login-pass" type="password" autocomplete="current-password"></div>
+    </div>
+    <div class="row">
+      <button class="run" data-run="login">Send</button>
+      <span class="hint" id="login-hint">or press Enter in the password field</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 2 · list sources -->
+  <section class="card">
+    <div class="head">
+      <span class="m get">GET</span>
+      <code>/space/api/service/asset-file/resource</code>
+    </div>
+    <p class="why">Lists sources. Not part of the vendor protocol — this service adds it for
+      its own UI — but it saves you hunting for a <code>source_id</code>. Also fills the
+      corpus selector above.</p>
+    <div class="row">
+      <button class="run" data-run="sources">Send</button>
+      <span class="hint">needs any signed-in account</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 3 · create source -->
+  <section class="card">
+    <div class="head">
+      <span class="m put">PUT</span>
+      <code>/space/api/service/asset-file/resource</code>
+    </div>
+    <p class="why">Creates a source — a folder under the materials directory — and returns its
+      <code>source_id</code>. Needs an <code>admin</code> account.</p>
+    <div class="grid">
+      <div class="field"><label for="res-name">resourceName</label>
+        <input id="res-name" placeholder="my-corpus"></div>
+    </div>
+    <div class="row">
+      <button class="run" data-run="create">Send</button>
+      <span class="hint">letters, digits, - and _; no slashes</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 4 · upload -->
+  <section class="card">
+    <div class="head">
+      <span class="m post">POST</span>
+      <code>/space/api/service/asset-file/web-upload?sourceId=…</code>
+    </div>
+    <p class="why">Multipart upload into the selected corpus. Parsing, chunking and indexing run
+      in the background, so the response is just a list of file ids — poll
+      <em>Ingest status</em> until they read <code>finish</code>.</p>
+    <div class="field"><label for="files">files</label>
+      <input id="files" type="file" multiple></div>
+    <div class="row">
+      <button class="run" data-run="upload">Send</button>
+      <span class="hint" id="upload-hint">uses the corpus selector above</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 5 · ingest status -->
+  <section class="card">
+    <div class="head">
+      <span class="m post">POST</span>
+      <code>/space/api/service/asset-file</code>
+    </div>
+    <p class="why">Status for a list of file ids. The body is a <em>bare JSON array</em>
+      (<code>[123]</code>), not an object.</p>
+    <div class="field"><label for="status-ids">file ids (comma or space separated)</label>
+      <textarea id="status-ids" placeholder="188669766757571, 198459963156660"></textarea></div>
+    <div class="row">
+      <button class="run" data-run="status">Send</button>
+      <span class="hint">pending / running / finish / failed</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 6 · recall -->
+  <section class="card">
+    <div class="head">
+      <span class="m post">POST</span>
+      <code>/space/api/service/llmapi/ht/normal_rag_recall_without_doc_group</code>
+    </div>
+    <p class="why">Retrieval. <strong>All parameters go in the query string</strong>, not the
+      body. <code>origin_ids</code> filters by <em>file</em> id, so leave it empty to search the
+      whole source — a non-empty value that matches nothing comes back as an empty list.</p>
+    <div class="grid">
+      <div class="field"><label for="q">question</label>
+        <input id="q" placeholder="不良贷款率"></div>
+      <div class="field"><label for="src-ids">source_ids</label>
+        <input id="src-ids" placeholder="98221971202903"></div>
+      <div class="field"><label for="origin-ids">origin_ids</label>
+        <input id="origin-ids" value="[]"></div>
+      <div class="field"><label for="types">recall_content_types</label>
+        <input id="types" placeholder="excel, text (blank = all)"></div>
+    </div>
+    <div class="row">
+      <button class="run" data-run="recall">Send</button>
+      <span class="hint">the union of the requested types, ranked</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 7 · segments -->
+  <section class="card">
+    <div class="head">
+      <span class="m get">GET</span>
+      <code>/space/api/service/asset-file/segments/{file_id}</code>
+    </div>
+    <p class="why">Whole-document readback. Each <code>segment.content</code> is a JSON string
+      holding <code>{"content": …}</code> — decoded below for readability.</p>
+    <div class="grid">
+      <div class="field"><label for="seg-id">file_id</label>
+        <input id="seg-id" placeholder="188669766757571"></div>
+    </div>
+    <div class="row">
+      <button class="run" data-run="segments">Send</button>
+      <span class="hint">a 40-page report is a large response</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <!-- 8 · answer -->
+  <section class="card">
+    <div class="head">
+      <span class="m post">POST</span>
+      <code>/space/api/service/sse/llmapi/ht/text/post-answer</code>
+    </div>
+    <p class="why">Streamed answer (SSE). <code>source_category_filter</code> is a
+      <em>string</em> containing a JSON object keyed by source id, and exactly one source is
+      accepted. Newlines and spaces travel as <code>[new_line]</code> /
+      <code>[whitespace]</code>, and the answer follows an empty <code>&lt;strong&gt;</code>
+      preamble — all decoded below.</p>
+    <div class="field"><label for="ans-q">question</label>
+      <input id="ans-q" placeholder="天津银行2021年不良贷款率是多少"></div>
+    <details class="adv">
+      <summary>source_category_filter (built from the corpus selector)</summary>
+      <div class="field"><label for="ans-filter">JSON string</label>
+        <input id="ans-filter" class="mono"></div>
+    </details>
+    <div class="row">
+      <button class="run" data-run="answer">Send</button>
+      <span class="hint" id="answer-hint">runs the agent — this one takes seconds</span>
+    </div>
+    <div class="out" hidden></div>
+  </section>
+
+  <div class="foot">every response is the vendor envelope — <code>{"code", "msg", "data"}</code></div>
+</main>
+
+<script>
+"use strict";
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+const REASON = { 200: "OK", 400: "Bad Request", 401: "Unauthorized", 404: "Not Found",
+                 409: "Conflict", 422: "Unprocessable Entity", 500: "Server Error",
+                 503: "Unavailable", 504: "Gateway Timeout" };
+
+/* ---------- request plumbing ---------- */
+
+function curlFor(method, url, opts = {}) {
+  const lines = [`curl -X ${method} '${url}'`, "  -b 'space-auth=<token>'"];
+  if (opts.json !== undefined) {
+    const body = { ...opts.json };
+    for (const key of opts.mask || []) if (key in body) body[key] = "<hidden>";
+    lines.push("  -H 'Content-Type: application/json'", `  -d '${JSON.stringify(body)}'`);
+  }
+  if (opts.form) lines.push(`  -F 'files=@<file>'   # one per file`);
+  return lines.join(" \\\n");
+}
+
+async function request(method, url, opts = {}) {
+  const init = { method, credentials: "same-origin" };
+  if (opts.json !== undefined) {
+    init.headers = { "Content-Type": "application/json" };
+    init.body = JSON.stringify(opts.json);
+  } else if (opts.form) {
+    init.body = opts.form;
+  }
+  const started = performance.now();
+  const response = await fetch(url, init);
+  const text = await response.text();
+  return { status: response.status, text, ms: Math.round(performance.now() - started),
+           method, url, curl: curlFor(method, url, opts) };
+}
+
+function pretty(text) {
+  try { return JSON.stringify(JSON.parse(text), null, 2); } catch { return null; }
+}
+
+/** Render a response: status pill, timing, optional table, body, curl. */
+function show(out, r, table) {
+  out.hidden = false;
+  const cls = r.status === 200 ? "" : (r.status === 400 || r.status === 401 || r.status >= 500) ? " bad" : " warn";
+  const body = pretty(r.text);
+  const parts = [
+    `<div class="meta"><span class="pill${cls}">${r.status} ${REASON[r.status] || ""}</span>`,
+    `<span class="ms">${r.ms} ms</span>`,
+    `<span class="ep">${r.method} ${esc(r.url.replace(location.origin, ""))}</span></div>`,
+  ];
+  if (r.status !== 200) {
+    const msg = body ? JSON.parse(r.text).msg : r.text;
+    parts.push(`<div class="err-text">${esc(msg || "")}</div>`);
+  }
+  if (table && r.status === 200) parts.push(table(JSON.parse(r.text).data));
+  parts.push(`<details class="curl" open><summary>curl</summary><pre class="curl">${esc(r.curl)}</pre></details>`);
+  parts.push(`<pre>${esc(body || r.text || "(empty body)")}</pre>`);
+  out.innerHTML = parts.join("\n");
+}
+
+/* ---------- shared state ---------- */
+
+let corpora = [];
+
+async function refreshSources() {
+  const r = await request("GET", "/space/api/service/asset-file/resource");
+  if (r.status !== 200) return null;
+  corpora = JSON.parse(r.text).data || [];
+  const keep = $("corpus").value;
+  $("corpus").innerHTML = corpora.length
+    ? corpora.map((s) => `<option value="${s.sourceId}">${esc(s.resourceName)} · ${s.sourceId}</option>`).join("")
+    : `<option value="">no sources yet</option>`;
+  if (keep && corpora.some((s) => String(s.sourceId) === keep)) $("corpus").value = keep;
+  syncFilter();
+  return corpora;
+}
+
+function syncFilter() {
+  const id = $("corpus").value;
+  $("ans-filter").value = id ? JSON.stringify({ [id]: [] }) : "{}";
+  if (id && !$("src-ids").value) $("src-ids").value = id;
+}
+
+async function whoami() {
+  const r = await request("GET", "/api/auth/me");
+  if (r.status === 200) {
+    const me = JSON.parse(r.text).data;
+    $("who").textContent = `${me.username} · ${me.role}`;
+  } else {
+    $("who").textContent = "not signed in";
+  }
+}
+
+/* ---------- the runners ---------- */
+
+const RUNNERS = {
+
+  async login(out) {
+    const r = await request("POST", "/space/api/passport/login",
+      { json: { username: $("login-user").value, passwd: $("login-pass").value }, mask: ["passwd"] });
+    show(out, r);
+    if (r.status === 200) {
+      const data = JSON.parse(r.text).data;
+      $("login-hint").textContent = `userId ${data.userId} · cookie issued`;
+      $("login-pass").value = "";
+      await whoami();
+      await refreshSources();
+    }
+  },
+
+  async sources(out) {
+    const list = await refreshSources();
+    const r = await request("GET", "/space/api/service/asset-file/resource");
+    show(out, r, (rows) => {
+      if (!rows.length) return `<div class="empty-row">no sources yet — create one below</div>`;
+      return `<table><tr><th>sourceId</th><th>resourceName</th></tr>` +
+        rows.map((s) => `<tr><td class="num">${s.sourceId}</td><td>${esc(s.resourceName)}</td></tr>`).join("") +
+        `</table>`;
+    });
+    return list;
+  },
+
+  async create(out) {
+    const name = $("res-name").value.trim();
+    const r = await request("PUT", "/space/api/service/asset-file/resource", { json: { resourceName: name } });
+    show(out, r);
+    if (r.status === 200) { await refreshSources(); $("corpus").value = String(JSON.parse(r.text).data); syncFilter(); }
+  },
+
+  async upload(out) {
+    const sourceId = $("corpus").value;
+    if (!sourceId) { out.hidden = false; out.innerHTML = `<div class="err-text">pick a corpus first</div>`; return; }
+    const files = $("files").files;
+    if (!files.length) { out.hidden = false; out.innerHTML = `<div class="err-text">choose at least one file</div>`; return; }
+    const form = new FormData();
+    for (const file of files) form.append("files", file);
+    const url = `/space/api/service/asset-file/web-upload?sourceId=${encodeURIComponent(sourceId)}`;
+    const r = await request("POST", url, { form });
+    show(out, r, (ids) => {
+      $("status-ids").value = (ids || []).join(", ");
+      return `<div class="empty-row">${ids.length} file(s) queued — the ids are filled into
+        <em>Ingest status</em> below; poll until they read <code>finish</code></div>`;
+    });
+  },
+
+  async status(out) {
+    const ids = $("status-ids").value.split(/[\s,]+/).filter(Boolean).map(Number);
+    if (!ids.length || ids.some(Number.isNaN)) {
+      out.hidden = false; out.innerHTML = `<div class="err-text">enter numeric file ids</div>`; return;
+    }
+    const r = await request("POST", "/space/api/service/asset-file", { json: ids });
+    show(out, r, (rows) => {
+      if (!rows.length) return `<div class="empty-row">no known file ids in that list</div>`;
+      return `<table><tr><th>id</th><th>fileName</th><th>status</th></tr>` +
+        rows.map((row) => {
+          const code = (row.status && row.status[0] && row.status[0].code) || "?";
+          const tone = code === "finish" ? "" : code === "failed" ? " bad" : " warn";
+          return `<tr><td class="num">${row.id}</td><td>${esc(row.fileName)}</td>` +
+                 `<td><span class="pill${tone}">${esc(code)}</span></td></tr>`;
+        }).join("") + `</table>`;
+    });
+  },
+
+  async recall(out) {
+    const params = new URLSearchParams();
+    params.set("question", $("q").value);
+    params.set("source_ids", $("src-ids").value.trim());
+    params.set("origin_ids", $("origin-ids").value.trim() || "[]");
+    for (const type of $("types").value.split(",").map((t) => t.trim()).filter(Boolean)) {
+      params.append("recall_content_types", type);
+    }
+    const url = "/space/api/service/llmapi/ht/normal_rag_recall_without_doc_group?" + params;
+    const r = await request("POST", url);
+    show(out, r, (hits) => {
+      if (!hits.length) return `<div class="empty-row">no hits — check source_ids (a comma-joined list)
+        and keep origin_ids empty</div>`;
+      const tally = hits.reduce((acc, h) => (acc[h.content_type] = (acc[h.content_type] || 0) + 1, acc), {});
+      return `<div class="empty-row">${hits.length} hits · ` +
+        Object.entries(tally).map(([k, v]) => `${v} ${esc(k)}`).join(" · ") + `</div>` +
+        `<table><tr><th class="num">rank</th><th class="num">score</th><th>type</th>
+          <th>source</th><th>segment</th></tr>` +
+        hits.map((h) => `<tr>
+            <td class="num">${h.rank}</td>
+            <td class="num">${Number(h.score).toFixed(3)}</td>
+            <td><span class="tag">${esc(h.content_type)}</span></td>
+            <td class="tag">${esc(h.source)}</td>
+            <td class="snip">${esc((h.segment || "").replace(/\s+/g, " ").slice(0, 220))}</td>
+          </tr>`).join("") + `</table>`;
+    });
+  },
+
+  async segments(out) {
+    const fileId = $("seg-id").value.trim();
+    const r = await request("GET", `/space/api/service/asset-file/segments/${encodeURIComponent(fileId)}`);
+    show(out, r, (rows) => {
+      const decoded = rows.map((row) => {
+        let text = row.segment.content;
+        try { text = JSON.parse(text).content; } catch { /* keep the raw string */ }
+        return { index: row.segment.index, text };
+      });
+      const chars = decoded.reduce((n, d) => n + d.text.length, 0);
+      return `<div class="empty-row">${decoded.length} segments · ${chars.toLocaleString()} characters</div>` +
+        decoded.slice(0, 40).map((d) =>
+          `<details class="curl"><summary>segment ${d.index} · ${d.text.length} chars</summary>
+             <pre>${esc(d.text.slice(0, 4000))}</pre></details>`).join("") +
+        (decoded.length > 40 ? `<div class="empty-row">… ${decoded.length - 40} more (see the JSON below)</div>` : "");
+    });
+  },
+
+  async answer(out) {
+    const body = { question: $("ans-q").value, source_category_filter: $("ans-filter").value, mode: 0 };
+    out.hidden = false;
+    out.innerHTML = `<div class="meta"><span class="pill warn">streaming…</span></div><pre class="stream"></pre>`;
+    const stream = out.querySelector("pre.stream");
+    const started = performance.now();
+    let raw = "";
+    try {
+      const response = await fetch("/space/api/service/sse/llmapi/ht/text/post-answer", {
+        method: "POST", credentials: "same-origin",
+        headers: { "Content-Type": "application/json", "Accept": "text/event-stream" },
+        body: JSON.stringify(body),
+      });
+      if (!response.ok || !response.body) {
+        const text = await response.text();
+        const msg = pretty(text) ? JSON.parse(text).msg : text;
+        out.innerHTML = `<div class="meta"><span class="pill bad">${response.status} ${REASON[response.status] || ""}</span></div>` +
+                        `<div class="err-text">${esc(msg || "")}</div>` +
+                        `<details class="curl" open><summary>curl</summary><pre class="curl">${esc(curlFor("POST", "/space/api/service/sse/llmapi/ht/text/post-answer", { json: body }))}</pre></details>`;
+        return;
+      }
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      for (;;) {
+        const { value, done } = await reader.read();
+        if (done) break;
+        raw += decoder.decode(value, { stream: true });
+        stream.textContent = decode(raw);
+      }
+      raw += decoder.decode();
+      stream.textContent = decode(raw);
+      out.querySelector(".meta").innerHTML =
+        `<span class="pill">200 OK</span><span class="ms">${Math.round(performance.now() - started)} ms</span>` +
+        `<span class="ep">POST /space/api/service/sse/llmapi/ht/text/post-answer</span>`;
+      out.insertAdjacentHTML("beforeend",
+        `<details class="curl"><summary>raw SSE</summary><pre>${esc(raw)}</pre></details>` +
+        `<details class="curl"><summary>curl</summary><pre class="curl">${esc(curlFor("POST", "/space/api/service/sse/llmapi/ht/text/post-answer", { json: body }))}</pre></details>`);
+    } catch (error) {
+      out.innerHTML = `<div class="err-text">stream failed: ${esc(error.message)}</div>`;
+    }
+  },
+};
+
+/** Undo the wire encoding: [new_line], [whitespace], and the empty preamble. */
+function decode(raw) {
+  const text = raw.split("\n")
+    .map((line) => (line.startsWith("data:") ? line.slice(5) : line))
+    .join("")
+    .replaceAll("[new_line]", "\n")
+    .replaceAll("[whitespace]", " ");
+  const end = text.indexOf("</strong>");
+  return end === -1 ? text : text.slice(end + "</strong>".length);
+}
+
+/* ---------- wiring ---------- */
+
+for (const button of document.querySelectorAll("button.run")) {
+  button.addEventListener("click", async () => {
+    const out = button.closest(".card").querySelector(".out");
+    button.disabled = true;
+    const label = button.textContent;
+    button.textContent = "Sending…";
+    try { await RUNNERS[button.dataset.run](out); }
+    catch (error) {
+      out.hidden = false;
+      out.innerHTML = `<div class="err-text">request failed: ${esc(error.message)}` +
+        `</div><div class="empty-row">is the service still up?</div>`;
+    } finally { button.disabled = false; button.textContent = label; }
+  });
+}
+
+$("login-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") document.querySelector('[data-run="login"]').click(); });
+$("corpus").addEventListener("change", syncFilter);
+$("signout").addEventListener("click", async () => {
+  await request("POST", "/api/auth/logout");
+  $("who").textContent = "not signed in";
+  $("corpus").innerHTML = `<option value="">signed out</option>`;
+  $("login-hint").textContent = "signed out";
+});
+
+(async () => { await whoami(); await refreshSources(); })();
+</script>
+</body>
+</html>

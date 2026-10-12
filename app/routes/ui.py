@@ -20,12 +20,20 @@ from app.responses import ok
 
 router = APIRouter()
 
-_PAGE = Path(__file__).resolve().parent.parent / "static" / "index.html"
+_STATIC = Path(__file__).resolve().parent.parent / "static"
+_PAGE = _STATIC / "index.html"
+_API_PAGE = _STATIC / "api.html"
 
 
 @router.get("/", include_in_schema=False)
 def index() -> FileResponse:
     return FileResponse(_PAGE)
+
+
+@router.get("/api-test", include_in_schema=False)
+def api_test() -> FileResponse:
+    """Fire the vendor-protocol endpoints by hand, one card per endpoint."""
+    return FileResponse(_API_PAGE)
 
 
 @router.get("/space/api/service/asset-file/resource", dependencies=[Depends(require_user)])

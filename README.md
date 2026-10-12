@@ -91,6 +91,10 @@ Everything except `/healthz` and login needs the `space-auth` cookie.
 
 Responses use the envelope `{"code", "msg", "data"}`.
 
+Two pages sit outside the protocol: `/` asks questions over a corpus, and
+`/api-test` fires each endpoint above from a card — the quickest way to see what
+a request and its response actually look like.
+
 ## Where it differs from the vendor
 
 - `recall_content_types` is a union in the order given, so `["excel", "text"]`
