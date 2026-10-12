@@ -291,3 +291,10 @@ def test_chat_stream_forwards_history(client, monkeypatch):
         assert resp.status_code == 200
         "".join(resp.iter_text())
     assert captured["history"] == history
+
+
+def test_logout_expires_the_session(client):
+    login(client)
+    assert client.get("/space/api/service/asset-file/resource").status_code == 200
+    assert client.post("/api/auth/logout").status_code == 200
+    assert client.get("/space/api/service/asset-file/resource").status_code == 401

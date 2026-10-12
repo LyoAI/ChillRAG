@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>ChillRAG</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23g)"/><text x="50" y="54" font-size="54" text-anchor="middle" dominant-baseline="middle">❄</text></svg>'>
 <style>
   :root {
     /* Morandi — dusty, low-saturation, warm-leaning */
@@ -39,7 +40,7 @@
 
   /* ================= sidebar ================= */
   .sidebar {
-    width: 300px; flex: none; background: var(--sidebar);
+    flex: 0 0 clamp(280px, 17%, 400px); background: var(--sidebar);
     border-right: 1px solid var(--line); display: flex; flex-direction: column;
     padding: 18px 14px; gap: 14px;
   }
@@ -71,11 +72,15 @@
   .session .del:hover { color: var(--err); }
   .sessions .none { color: var(--faint); font-size: 12.5px; text-align: center; padding: 18px 0; }
   .side-foot { font: 11.5px var(--mono); color: var(--faint); padding: 0 6px; }
+  .side-foot .live { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--sage); margin-right: 6px; animation: pulse 1.4s ease-in-out infinite; }
+  .side-foot a { color: var(--sage-deep); text-decoration: none; }
+  .side-foot a:hover { text-decoration: underline; }
 
   /* ================= main ================= */
-  .main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+  .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
   .top {
-    flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 22px;
+    flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 32px;
     border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 78%, transparent);
     backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 5;
   }
@@ -87,7 +92,7 @@
   }
   #source:focus { outline: none; border-color: var(--sage); }
   .convo { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-  .convo-inner { max-width: 840px; margin: 0 auto; padding: 26px 24px 20px; }
+  .convo-inner { width: 100%; margin: 0 auto; padding: 28px 48px 20px; }
 
   .empty { text-align: center; color: var(--muted); padding: 12vh 20px 0; }
   .empty .flake {
@@ -107,7 +112,7 @@
   .msg { margin-bottom: 24px; animation: rise .3s cubic-bezier(.2,.7,.3,1) both; }
   .msg.user { display: flex; justify-content: flex-end; }
   .msg.user .bubble {
-    max-width: 78%; background: var(--sage); color: #fff; border-radius: 15px 15px 4px 15px;
+    max-width: 68%; background: var(--sage); color: #fff; border-radius: 15px 15px 4px 15px;
     padding: 11px 16px; white-space: pre-wrap; word-break: break-word; font-size: 14.5px;
     box-shadow: 0 2px 10px rgba(120,140,120,.28);
   }
@@ -160,6 +165,14 @@
   }
   .msg.ai .status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
     background: var(--sage); margin-right: 7px; animation: pulse 1.4s ease-in-out infinite; }
+  .msg.ai .actions { margin: 8px 0 0; opacity: 0; transition: opacity .15s; }
+  .msg.ai:hover .actions { opacity: 1; }
+  .actions .copy {
+    font: 11px var(--mono); color: var(--muted); background: none; cursor: pointer;
+    border: 1px solid var(--line); border-radius: 7px; padding: 3px 11px;
+    transition: color .15s, border-color .15s;
+  }
+  .actions .copy:hover { color: var(--ink); border-color: var(--sage); }
   @keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
 
   .typing { display: inline-flex; gap: 4px; padding: 4px 2px; }
@@ -169,9 +182,9 @@
   @keyframes blink { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 
   /* ================= composer ================= */
-  .dock { flex: none; border-top: 1px solid var(--line); padding: 16px 22px 20px;
+  .dock { flex: none; border-top: 1px solid var(--line); padding: 16px 48px 20px;
           background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); }
-  .composer { max-width: 840px; margin: 0 auto; }
+  .composer { width: 100%; margin: 0 auto; }
   .box {
     display: flex; align-items: flex-end; gap: 10px; background: var(--panel);
     border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 12px 18px;
@@ -253,7 +266,7 @@
     <div class="brand"><span class="mark">❄</span>ChillRAG</div>
     <button id="new-chat">＋ New chat</button>
     <div class="sessions" id="sessions"></div>
-    <div class="side-foot" id="who"></div>
+    <div class="side-foot"><span class="live"></span>signed in · <a href="#" id="signout">sign out</a></div>
   </aside>
 
   <div class="main">
@@ -416,9 +429,27 @@ function addMessage(role, content, scroll = true) {
   b.className = "bubble";
   b.innerHTML = role === "user" ? escapeHtml(content) : render(content);
   msg.appendChild(b);
+  if (role === "ai") addCopyBar(msg, () => b.innerText);
   $("thread").appendChild(msg);
   if (scroll) scrollEnd();
   return msg;
+}
+
+function addCopyBar(container, getText) {
+  const bar = document.createElement("div");
+  bar.className = "actions";
+  const btn = document.createElement("button");
+  btn.className = "copy";
+  btn.textContent = "Copy";
+  btn.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      btn.textContent = "Copied ✓";
+      setTimeout(() => (btn.textContent = "Copy"), 1500);
+    } catch { /* clipboard unavailable (http/insecure context) */ }
+  });
+  bar.appendChild(btn);
+  container.appendChild(bar);
 }
 function addAiPlaceholder() {
   const empty = $("empty"); if (empty) empty.remove();
@@ -436,6 +467,11 @@ function addAiPlaceholder() {
 
 /* ---------- asking ---------- */
 $("new-chat").addEventListener("click", newChat);
+$("signout").addEventListener("click", async (e) => {
+  e.preventDefault();
+  await fetch("/api/auth/logout", { method: "POST" });
+  location.reload();
+});
 $("send").addEventListener("click", ask);
 $("question").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(); });
 $("question").addEventListener("input", function () {
@@ -483,6 +519,7 @@ async function ask() {
     });
     if (!ai.raw && ai.bubble.querySelector(".typing")) ai.bubble.innerHTML = "";
     ai.status.style.display = "none";
+    addCopyBar(ai.msg, () => ai.bubble.innerText);
     current.messages.push({ role: "assistant", content: ai.raw || "(no answer)" });
   } catch (err) {
     ai.bubble.innerHTML = '<em style="color:var(--err)">' + escapeHtml(err.message) + "</em>";

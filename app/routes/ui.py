@@ -9,12 +9,12 @@ import json
 from pathlib import Path
 
 from fastapi import APIRouter, Depends
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from starlette.concurrency import run_in_threadpool
 
 from app import registry
-from app.auth import require_user
+from app.auth import COOKIE, require_user
 from app.corpus import attached_tool
 from app.responses import ok
 
@@ -32,6 +32,14 @@ def index() -> FileResponse:
 def list_sources():
     """UI-support extension (the vendor protocol has no list endpoint)."""
     return ok([{"sourceId": sid, "resourceName": folder} for sid, folder in registry.sources()])
+
+
+@router.post("/api/auth/logout")
+def logout() -> JSONResponse:
+    """UI-support extension: expire the ``space-auth`` cookie."""
+    response = JSONResponse(ok(True))
+    response.delete_cookie(COOKIE)
+    return response
 
 
 class ChatBody(BaseModel):
