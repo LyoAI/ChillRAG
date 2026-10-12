@@ -23,3 +23,6 @@ dist/
 
 .env
 config/
+
+# Service accounts (plaintext passwords)
+users.yaml

@@ -51,8 +51,14 @@ def client(tmp_path, monkeypatch):
     monkeypatch.setattr(jobs, "RAGTool", FakeTool)
     monkeypatch.setattr(jobs, "_STATUS", {})
     FakeTool.calls = []
-    config = auth.AuthConfig(username="svc", password=PASSWORD)
-    with TestClient(create_app(config)) as test_client:
+    store = auth.AuthStore(
+        users={
+            "svc": auth.User("svc", PASSWORD, "admin"),
+            "viewer": auth.User("viewer", "v", "user"),
+        },
+        secret="test-secret",
+    )
+    with TestClient(create_app(store)) as test_client:
         yield test_client
 
 
@@ -93,12 +99,30 @@ def test_protected_route_without_cookie_is_401_envelope(client):
 
 
 def test_tampered_or_expired_token_is_rejected():
-    config = auth.AuthConfig(username="svc", password="s")
-    token = config.issue_token(now=0)  # expired long ago
-    assert not config.verify_token(token)
-    fresh = config.issue_token()
-    user, expiry, sig = fresh.split(".")
-    assert not config.verify_token(f"{user}.{expiry}.{'0' * len(sig)}")
+    store = auth.AuthStore(users={"svc": auth.User("svc", "pw", "admin")}, secret="s")
+    user = store.users["svc"]
+    assert store.verify_token(store.issue_token(user, now=0)) is None  # expired
+    fresh = store.issue_token(user)
+    name, expiry, sig = fresh.split(".")
+    assert store.verify_token(f"{name}.{expiry}.{'0' * len(sig)}") is None  # forged
+
+
+def test_roles_gate_source_creation(client):
+    client.post("/space/api/passport/login", json={"username": "viewer", "passwd": "v"})
+    assert client.put("/space/api/service/asset-file/resource",
+                      json={"resourceName": "nope"}).status_code == 403
+    assert client.get("/api/auth/me").json()["data"] == {"username": "viewer", "role": "user"}
+
+
+def test_users_file_is_loaded(tmp_path, monkeypatch):
+    users = tmp_path / "users.yaml"
+    users.write_text("users:\n  bob:\n    password: pw\n    role: user\n", encoding="utf-8")
+    monkeypatch.setenv("CHILLRAG_USERS_FILE", str(users))
+    monkeypatch.delenv("CHILLRAG_USER", raising=False)
+    monkeypatch.setenv("CHILLRAG_AUTH_SECRET", "s")
+    store = auth.AuthStore.from_env()
+    assert store.verify("bob", "pw").role == "user"
+    assert store.verify("bob", "wrong") is None
 
 
 # ------------------------------------------------------------ sources --

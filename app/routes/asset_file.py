@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile
 from pydantic import BaseModel
 
 from app import jobs, registry
-from app.auth import require_user
+from app.auth import require_admin, require_user
 from app.corpus import attached_tool
 from app.responses import ok
 from chillrag.config import MATERIALS_DIR
@@ -33,7 +33,7 @@ def _safe_name(name: str) -> str:
     return name
 
 
-@router.put("/resource")
+@router.put("/resource", dependencies=[Depends(require_admin)])
 def create_source(body: ResourceBody):
     folder = _safe_name(body.resourceName)
     (MATERIALS_DIR / folder).mkdir(parents=True, exist_ok=True)

@@ -34,6 +34,12 @@ def list_sources():
     return ok([{"sourceId": sid, "resourceName": folder} for sid, folder in registry.sources()])
 
 
+@router.get("/api/auth/me")
+def me(user=Depends(require_user)):
+    """UI-support extension: who the current ``space-auth`` cookie belongs to."""
+    return ok({"username": user.username, "role": user.role})
+
+
 @router.post("/api/auth/logout")
 def logout() -> JSONResponse:
     """UI-support extension: expire the ``space-auth`` cookie."""

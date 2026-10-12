@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta name="color-scheme" content="light dark">
 <title>ChillRAG</title>
-<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="22" fill="url(%23g)"/><text x="50" y="54" font-size="54" text-anchor="middle" dominant-baseline="middle">❄</text></svg>'>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(%23g)"/><g stroke="%23ffffff" stroke-width="9" stroke-linecap="round"><path d="M50 22v56"/><path d="M26.5 35.5l47 29"/><path d="M26.5 64.5l47-29"/></g></svg>'>
 <style>
   :root {
     /* Morandi — dusty, low-saturation, warm-leaning */
@@ -266,7 +266,7 @@
     <div class="brand"><span class="mark">❄</span>ChillRAG</div>
     <button id="new-chat">＋ New chat</button>
     <div class="sessions" id="sessions"></div>
-    <div class="side-foot"><span class="live"></span>signed in · <a href="#" id="signout">sign out</a></div>
+    <div class="side-foot"><span class="live"></span><span id="me">signed in</span> · <a href="#" id="signout">sign out</a></div>
   </aside>
 
   <div class="main">
@@ -292,7 +292,7 @@
           <textarea id="question" rows="1" placeholder="Ask anything about the selected corpus…"></textarea>
           <button id="send" title="Send">↑</button>
         </div>
-        <div class="hint">ChillRAG may cite specific files and pages · ⌘↵ to send</div>
+        <div class="hint">answers cite files and pages · Enter to send · Shift+Enter for a newline</div>
       </div>
     </div>
   </div>
@@ -351,7 +351,15 @@ function enter() {
   $("gate").style.display = "none";
   $("shell").style.display = "flex";
   renderSessions();
+  fetchMe();
   $("question").focus();
+}
+
+async function fetchMe() {
+  const resp = await fetch("/api/auth/me");
+  if (!resp.ok) return;
+  const me = (await resp.json()).data;
+  $("me").textContent = me.username + " · " + me.role;
 }
 function buildChips() {
   const box = $("chips"); box.innerHTML = "";
@@ -473,7 +481,14 @@ $("signout").addEventListener("click", async (e) => {
   location.reload();
 });
 $("send").addEventListener("click", ask);
-$("question").addEventListener("keydown", (e) => { if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) ask(); });
+$("question").addEventListener("keydown", (e) => {
+  // Enter sends, Shift+Enter breaks the line; isComposing keeps the IME
+  // (pinyin) confirm key from sending mid-composition.
+  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
+    e.preventDefault();
+    ask();
+  }
+});
 $("question").addEventListener("input", function () {
   this.style.height = "auto";
   this.style.height = Math.min(this.scrollHeight, 200) + "px";

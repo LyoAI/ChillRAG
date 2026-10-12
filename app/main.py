@@ -26,9 +26,9 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     yield
 
 
-def create_app(auth_config: auth.AuthConfig | None = None) -> FastAPI:
+def create_app(auth_config: auth.AuthStore | None = None) -> FastAPI:
     app = FastAPI(title="ChillRAG", version="0.1.0", lifespan=lifespan)
-    app.state.auth = auth_config or auth.AuthConfig.from_env()
+    app.state.auth = auth_config or auth.AuthStore.from_env()
 
     @app.exception_handler(HTTPException)
     async def _http_error(request: Request, exc: HTTPException) -> JSONResponse:

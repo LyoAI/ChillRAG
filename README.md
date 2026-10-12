@@ -11,19 +11,39 @@ clients only change their base URL.
 
 ```bash
 uv sync
-export CHILLRAG_USER=svc
-export CHILLRAG_PASSWORD='change-me'
+# accounts: create users.yaml (gitignored) — see Accounts below
 uv run uvicorn app.main:create_app --factory --workers 1 --host 0.0.0.0 --port 9022
 ```
 
 Keep `--workers 1`. The source registry, ingest status and embedder are per
 process.
 
+## Accounts
+
+Login uses a gitignored `users.yaml` at the repo root:
+
+```yaml
+users:
+  alice:
+    password: "change-me"     # single-quote if it has # $ @ etc.
+    role: admin               # admin manages sources; user asks and retrieves
+  bob:
+    password: "..."
+    role: user
+```
+
+Edits take effect on restart. Without the file, a single admin account falls
+back to `CHILLRAG_USER` / `CHILLRAG_PASSWORD`. Tokens are signed with
+`CHILLRAG_AUTH_SECRET`, or a secret auto-generated under the cache dir, so
+restarts keep sessions.
+
 ## Configure
 
 | Variable | Purpose |
 |---|---|
-| `CHILLRAG_USER`, `CHILLRAG_PASSWORD` | Login account (plaintext; quote it if it has `# $ @` etc.) |
+| `CHILLRAG_USERS_FILE` | Accounts file (default `users.yaml`) |
+| `CHILLRAG_USER`, `CHILLRAG_PASSWORD` | Fallback single account when no users file |
+| `CHILLRAG_AUTH_SECRET` | Token signing key (auto-generated if unset) |
 | `CHILLRAG_MATERIALS_DIR` | Where uploaded folders are written |
 | `CHILLRAG_CACHE_DIR` | Parsed documents, indexes and the service registry |
 | `CHILLRAG_LLM_PROVIDER`, `CHILLRAG_MODEL`, `CHILLRAG_LLM_CONFIG_DIR` | Answer model |

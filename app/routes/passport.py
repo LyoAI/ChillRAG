@@ -17,10 +17,16 @@ class LoginBody(BaseModel):
 
 @router.post("/login")
 def login(body: LoginBody, request: Request):
-    config: auth.AuthConfig = request.app.state.auth
-    if body.username != config.username or not config.check_password(body.passwd):
+    store: auth.AuthStore = request.app.state.auth
+    user = store.verify(body.username, body.passwd)
+    if user is None:
         return fail(401, "invalid username or password")
-    token = config.issue_token()
-    response = JSONResponse(ok({"token": token, "userId": config.user_id}))
+    token = store.issue_token(user)
+    response = JSONResponse(ok({
+        "token": token,
+        "userId": store.user_id(user.username),  # the vendor client reads this
+        "username": user.username,
+        "role": user.role,
+    }))
     response.set_cookie(auth.COOKIE, token, httponly=True, max_age=auth.TOKEN_TTL_S)
     return response
