@@ -53,4 +53,9 @@ def post_answer(body: AnswerBody):
         answer = tool.answer_by_question(body.question, source_id_list=source_ids)
     except TimeoutError:
         return fail(504, "answer timed out")
+    if not answer.strip():
+        # The agent ends the episode with no answer when the model call itself
+        # failed (bad key, no balance). Streaming the empty preamble under 200
+        # would look like a blank answer rather than a broken service.
+        return fail(503, "the answer model returned nothing: check the provider and its balance")
     return StreamingResponse(_stream(answer), media_type="text/event-stream")

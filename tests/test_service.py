@@ -227,6 +227,19 @@ def test_post_answer_rejects_more_than_one_source(client):
     assert response.json()["msg"] == "post-answer takes exactly one source"
 
 
+def test_post_answer_reports_a_failed_model_as_503(client, monkeypatch):
+    """The agent returns nothing when the model call fails; 200 with an empty
+    body would read as a blank answer rather than a broken service."""
+    login(client)
+    source = client.put("/space/api/service/asset-file/resource",
+                        json={"resourceName": "bank-r"}).json()["data"]
+    monkeypatch.setattr(FakeTool, "answer_by_question", lambda self, question, **kwargs: "")
+    response = client.post("/space/api/service/sse/llmapi/ht/text/post-answer",
+                           json={"question": "q", "source_category_filter": json.dumps({str(source): []})})
+    assert response.status_code == 503
+    assert "returned nothing" in response.json()["msg"]
+
+
 def test_upload_during_ingest_reruns_the_folder():
     """An upload arriving mid-ingest must re-queue: the running pass snapshots
     an incomplete file set, so its store would silently miss the new files."""
