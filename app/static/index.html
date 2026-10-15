@@ -6,574 +6,522 @@
 <meta name="color-scheme" content="light dark">
 <title>ChillRAG</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(%23g)"/><g stroke="%23ffffff" stroke-width="9" stroke-linecap="round"><path d="M50 22v56"/><path d="M26.5 35.5l47 29"/><path d="M26.5 64.5l47-29"/></g></svg>'>
+<link rel="stylesheet" href="/static/theme.css">
 <style>
-  :root {
-    /* Morandi — dusty, low-saturation, warm-leaning */
-    --bg: #efede8;
-    --sidebar: #e8e5df;
-    --panel: #f8f6f2;
-    --panel-2: #f2efe9;
-    --ink: #3b3732;
-    --muted: #7c766c;
-    --faint: #a39c91;
-    --line: #ddd8cf;
-    --sage: #93a88e;       --sage-deep: #7d9578;
-    --dusk: #8aa2b0;
-    --clay: #c2a08a;
-    --err: #b96a5f;
-    --shadow: 0 1px 2px rgba(70,60,50,.05), 0 8px 28px rgba(70,60,50,.07);
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #24211d; --sidebar: #1d1b18; --panel: #2b2823; --panel-2: #312d28;
-            --ink: #e9e4dc; --muted: #a49c90; --faint: #6f685e; --line: #3a352e;
-            --sage: #9db39a; --sage-deep: #aac0a6; --dusk: #9bb3c0; --clay: #c9a892;
-            --err: #d08a7c; --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.35); }
-  }
-  * { box-sizing: border-box; margin: 0; }
   html, body { height: 100%; }
-  body {
-    background: var(--bg); color: var(--ink); font: 14.5px/1.7 var(--sans);
-    -webkit-font-smoothing: antialiased; display: flex; overflow: hidden;
-  }
+  body { display: flex; flex-direction: column; overflow: hidden; }
+
+  /* The reading column and the composer share one width, so the text a reader
+     types sits directly under the text they are reading. */
+  #shell { --thread: 780px; flex: 1; display: flex; flex-direction: column; min-height: 0; }
+  .body { flex: 1; display: flex; min-height: 0; }
 
   /* ================= sidebar ================= */
   .sidebar {
-    flex: 0 0 clamp(280px, 17%, 400px); background: var(--sidebar);
+    flex: 0 0 clamp(250px, 19%, 330px); background: var(--sidebar);
     border-right: 1px solid var(--line); display: flex; flex-direction: column;
-    padding: 18px 14px; gap: 14px;
+    padding: 14px 12px; gap: 10px; min-height: 0;
   }
-  .brand { display: flex; align-items: center; gap: 10px; font-weight: 650; letter-spacing: .2px; padding: 0 6px; }
-  .brand .mark {
-    width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, var(--sage), var(--dusk));
-    color: #fff; font-size: 15px; line-height: 30px; text-align: center; flex: none;
-  }
+  .side-head { display: flex; align-items: center; gap: 8px; }
   #new-chat {
-    width: 100%; padding: 10px 14px; border: 1px solid var(--line); border-radius: 11px;
-    background: var(--panel); color: var(--ink); font: 600 13.5px var(--sans); cursor: pointer;
-    display: flex; align-items: center; gap: 8px; transition: background .15s, border-color .15s;
+    flex: 1; padding: 10px 14px; border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--panel); color: var(--ink); font: 600 var(--fs-md) var(--sans);
+    cursor: pointer; display: flex; align-items: center; gap: 8px;
+    transition: background .15s, border-color .15s;
   }
   #new-chat:hover { background: var(--panel-2); border-color: var(--sage); }
-  .sessions { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; margin: 0 -4px; padding: 0 4px; }
+  #sidebar-close { display: none; }
+  #session-filter { width: 100%; font-size: var(--fs-sm); padding: 7px 10px; }
+
+  .sessions { flex: 1; overflow-y: auto; display: flex; flex-direction: column;
+              gap: 2px; margin: 0 -4px; padding: 0 4px; min-height: 0; }
+  .group { font: var(--fs-xs) var(--mono); letter-spacing: .1em; text-transform: uppercase;
+           color: var(--faint); padding: 12px 10px 5px; }
   .session {
-    display: flex; align-items: center; gap: 8px; padding: 9px 12px; border-radius: 9px;
-    cursor: pointer; color: var(--muted); font-size: 13.5px; position: relative;
+    display: flex; align-items: center; gap: 8px; padding: 9px 11px;
+    border-radius: 10px; cursor: pointer; color: var(--muted); font-size: var(--fs-md);
     transition: background .12s, color .12s;
   }
   .session:hover { background: var(--panel); color: var(--ink); }
   .session.active { background: var(--panel); color: var(--ink); box-shadow: inset 0 0 0 1px var(--line); }
-  .session .title { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session .text { flex: 1; min-width: 0; }
+  .session .title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .session .when { display: block; font: var(--fs-xs) var(--mono); color: var(--faint); margin-top: 2px; }
+  .session .rename { width: 100%; font: var(--fs-md) var(--sans); color: var(--ink);
+                     background: var(--panel-2); border: 1px solid var(--sage);
+                     border-radius: 7px; padding: 4px 7px; }
   .session .del {
-    opacity: 0; border: none; background: none; color: var(--faint); cursor: pointer;
-    font-size: 14px; padding: 0 2px; transition: opacity .12s, color .12s;
+    opacity: 0; flex: none; border: none; background: none; color: var(--faint);
+    cursor: pointer; font-size: var(--fs-sm); padding: 2px 4px; border-radius: 6px;
+    transition: opacity .12s, color .12s, background .12s;
   }
-  .session:hover .del { opacity: 1; }
+  .session:hover .del, .session .del.armed { opacity: 1; }
   .session .del:hover { color: var(--err); }
-  .sessions .none { color: var(--faint); font-size: 12.5px; text-align: center; padding: 18px 0; }
-  .side-foot { font: 11.5px var(--mono); color: var(--faint); padding: 0 6px; }
+  .session .del.armed { color: var(--err); background: color-mix(in srgb, var(--err) 14%, transparent); }
+  .sessions .none { color: var(--faint); font-size: var(--fs-sm); text-align: center; padding: 20px 0; }
+  /* Without hover there is no way to reveal the delete button, so it stays out. */
+  @media (hover: none) { .session .del { opacity: 1; } }
+  .side-foot { font: var(--fs-xs) var(--mono); color: var(--faint); padding: 4px 8px 0;
+               border-top: 1px solid var(--line); }
   .side-foot .live { display: inline-block; width: 7px; height: 7px; border-radius: 50%;
     background: var(--sage); margin-right: 6px; animation: pulse 1.4s ease-in-out infinite; }
-  .side-foot a { color: var(--sage-deep); text-decoration: none; }
-  .side-foot a:hover { text-decoration: underline; }
 
   /* ================= main ================= */
   .main { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
-  .top {
-    flex: none; display: flex; align-items: center; gap: 10px; padding: 12px 32px;
-    border-bottom: 1px solid var(--line); background: color-mix(in srgb, var(--bg) 78%, transparent);
-    backdrop-filter: blur(12px); position: sticky; top: 0; z-index: 5;
-  }
-  .top .label { font: 11px var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--faint); }
-  #source {
-    font: 13px var(--sans); color: var(--ink); background: var(--panel);
-    border: 1px solid var(--line); border-radius: 9px; padding: 7px 12px; min-width: 180px;
-    cursor: pointer; transition: border-color .15s;
-  }
-  #source:focus { outline: none; border-color: var(--sage); }
-  .convo { flex: 1; overflow-y: auto; scroll-behavior: smooth; }
-  /* Reading column: fills the viewport on a narrow screen, stops widening once
-     a line would exceed a comfortable measure. The first max-width is the
-     fallback for a browser without clamp(). */
-  .convo-inner { width: 100%; max-width: 900px; max-width: clamp(680px, 58vw, 1000px);
-                 margin: 0 auto; padding: 28px clamp(16px, 3vw, 48px) 20px; }
+  .convo { flex: 1; overflow-y: auto; }
+  .convo-inner { width: 100%; max-width: var(--thread); margin: 0 auto;
+                 padding: 26px clamp(16px, 3vw, 40px) 16px; }
 
-  .empty { text-align: center; color: var(--muted); padding: 12vh 20px 0; }
-  .empty .flake {
-    font-size: 44px; line-height: 1; margin-bottom: 18px;
-    filter: drop-shadow(0 8px 24px rgba(120,140,120,.35));
-  }
-  .empty h2 { font-size: 19px; font-weight: 640; color: var(--ink); margin-bottom: 6px; letter-spacing: .2px; }
-  .empty p { font-size: 13.5px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; margin-top: 26px; }
+  .empty { text-align: center; color: var(--muted); padding: 11vh 12px 0; }
+  .empty .flake { font-size: 42px; line-height: 1; margin-bottom: 18px;
+                  filter: drop-shadow(0 8px 24px rgba(120,140,120,.35)); }
+  .empty h2 { font-size: var(--fs-lg); font-weight: 640; color: var(--ink);
+              margin-bottom: 6px; letter-spacing: .2px; }
+  .empty p { font-size: var(--fs-md); }
+  .empty-cta { margin-top: 22px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 9px; justify-content: center; margin-top: 24px; }
   .chip {
-    font: 12.5px var(--sans); color: var(--muted); background: var(--panel);
+    font: var(--fs-sm) var(--sans); color: var(--muted); background: var(--panel);
     border: 1px solid var(--line); border-radius: 999px; padding: 8px 16px; cursor: pointer;
-    transition: all .16s;
+    transition: color .16s, border-color .16s, transform .16s, box-shadow .16s;
   }
   .chip:hover { color: var(--ink); border-color: var(--sage); transform: translateY(-1px); box-shadow: var(--shadow); }
 
-  .msg { margin-bottom: 24px; animation: rise .3s cubic-bezier(.2,.7,.3,1) both; }
+  .msg { margin-bottom: 22px; animation: rise .3s cubic-bezier(.2,.7,.3,1) both; }
   .msg.user { display: flex; justify-content: flex-end; }
   .msg.user .bubble {
-    max-width: 68%; background: var(--sage); color: #fff; border-radius: 15px 15px 4px 15px;
-    padding: 11px 16px; white-space: pre-wrap; word-break: break-word; font-size: 14.5px;
+    max-width: 76%; background: var(--sage); color: var(--on-accent);
+    border-radius: 15px 15px 4px 15px; padding: 11px 16px;
+    white-space: pre-wrap; word-break: break-word; font-size: var(--fs-base);
     box-shadow: 0 2px 10px rgba(120,140,120,.28);
   }
-  .msg.ai { position: relative; padding-left: 42px; }
+  .msg.ai { position: relative; padding-left: 40px; }
   .msg.ai::before {
-    content: "❄"; position: absolute; left: 0; top: 1px; width: 30px; height: 30px;
+    content: "❄"; position: absolute; left: 0; top: 1px; width: 29px; height: 29px;
     border-radius: 9px; background: linear-gradient(135deg, var(--sage), var(--dusk));
-    color: #fff; text-align: center; line-height: 30px; font-size: 14px;
+    color: var(--on-accent); text-align: center; line-height: 29px; font-size: var(--fs-md);
   }
   .msg.ai .bubble {
     background: none; border: none; box-shadow: none; padding: 2px 0 0;
-    white-space: pre-wrap; word-break: break-word; font-size: 14.5px; line-height: 1.78;
+    /* Not pre-wrap: this bubble holds marked's HTML, and preserving the
+       newlines between its block tags would open a gap after every paragraph. */
+    word-break: break-word; font-size: var(--fs-base); line-height: 1.75;
   }
+  .msg.ai .bubble > :first-child { margin-top: 0; }
   .msg.ai .bubble strong { font-weight: 650; }
   .msg.ai .bubble code {
-    font: 12.5px/1.5 var(--mono); background: var(--panel-2); border: 1px solid var(--line);
+    font: var(--fs-sm)/1.5 var(--mono); background: var(--panel-2); border: 1px solid var(--line);
     border-radius: 6px; padding: 1px 5px;
   }
   .msg.ai .bubble a { color: var(--sage-deep); text-decoration: underline; text-underline-offset: 2px; }
   .msg.ai .bubble a:hover { color: var(--dusk); }
   .msg.ai .bubble h1, .msg.ai .bubble h2, .msg.ai .bubble h3, .msg.ai .bubble h4 {
-    font-weight: 650; margin: 16px 0 8px; line-height: 1.4;
+    font-weight: 650; margin: 18px 0 8px; line-height: 1.4;
   }
   .msg.ai .bubble h1 { font-size: 1.3em; }
   .msg.ai .bubble h2 { font-size: 1.18em; }
   .msg.ai .bubble h3 { font-size: 1.05em; }
   .msg.ai .bubble ul, .msg.ai .bubble ol { margin: 8px 0; padding-left: 22px; }
-  .msg.ai .bubble li { margin: 3px 0; }
+  .msg.ai .bubble li { margin: 4px 0; }
   .msg.ai .bubble pre {
     background: var(--panel-2); border: 1px solid var(--line); border-radius: 10px;
-    padding: 12px 14px; overflow-x: auto; font: 12.5px/1.55 var(--mono); margin: 10px 0;
+    padding: 12px 14px; overflow-x: auto; font: var(--fs-sm)/1.55 var(--mono); margin: 10px 0;
   }
   .msg.ai .bubble pre code { background: none; border: none; padding: 0; }
   .msg.ai .bubble blockquote {
     border-left: 3px solid var(--sage); margin: 10px 0; padding: 2px 0 2px 14px; color: var(--muted);
   }
-  .msg.ai .bubble hr { border: none; border-top: 1px solid var(--line); margin: 16px 0; }
+  .msg.ai .bubble hr { border: none; border-top: 1px solid var(--line); margin: 18px 0; }
   .msg.ai .bubble table {
-    border-collapse: collapse; margin: 12px 0; font-size: 13px;
-    display: block; overflow-x: auto; white-space: nowrap; max-width: 100%;
+    border-collapse: collapse; margin: 12px 0; font-size: var(--fs-sm);
+    display: block; overflow-x: auto; max-width: 100%;
   }
   .msg.ai .bubble th, .msg.ai .bubble td {
-    border: 1px solid var(--line); padding: 6px 12px; text-align: left;
+    border: 1px solid var(--line); padding: 6px 12px; text-align: left; white-space: nowrap;
   }
   .msg.ai .bubble th { background: var(--panel-2); font-weight: 650; }
   .msg.ai .bubble tr:nth-child(even) td { background: color-mix(in srgb, var(--panel-2) 55%, transparent); }
+
+  .msg.ai .bubble em.failure { color: var(--err); font-style: normal; font-size: var(--fs-md); }
+
   .msg.ai .status {
-    font: 12px var(--mono); color: var(--faint); margin: 0 0 7px 0; min-height: 0;
-    transition: opacity .2s; letter-spacing: .02em;
+    font: var(--fs-xs) var(--mono); color: var(--faint); margin: 0 0 7px; letter-spacing: .02em;
   }
   .msg.ai .status .dot { display: inline-block; width: 6px; height: 6px; border-radius: 50%;
     background: var(--sage); margin-right: 7px; animation: pulse 1.4s ease-in-out infinite; }
   .msg.ai .actions { margin: 8px 0 0; opacity: 0; transition: opacity .15s; }
-  .msg.ai:hover .actions { opacity: 1; }
+  .msg.ai:hover .actions, .msg.ai:focus-within .actions { opacity: 1; }
   .actions .copy {
-    font: 11px var(--mono); color: var(--muted); background: none; cursor: pointer;
+    font: var(--fs-xs) var(--mono); color: var(--muted); background: none; cursor: pointer;
     border: 1px solid var(--line); border-radius: 7px; padding: 3px 11px;
     transition: color .15s, border-color .15s;
   }
   .actions .copy:hover { color: var(--ink); border-color: var(--sage); }
-  @keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+
+  /* ------------- retrieval trace -------------
+     One collapsed card per tool call, kept with the answer it produced: the
+     transcript says which tools ran, in what order, expanded on demand. */
+  .trace { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
+  .tool-card {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 9px;
+    font-size: var(--fs-sm); overflow: hidden;
+  }
+  .tool-card summary {
+    display: flex; align-items: center; gap: 8px; padding: 7px 11px;
+    cursor: pointer; color: var(--muted); list-style: none;
+  }
+  .tool-card summary::-webkit-details-marker { display: none; }
+  .tool-card summary::after { content: "▸"; margin-left: auto; color: var(--faint); font-size: 10px; }
+  .tool-card[open] summary::after { content: "▾"; }
+  .tool-card summary:hover { color: var(--ink); }
+  .tool-card .tc-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--sage); flex: none; }
+  .tool-card .tc-label { color: var(--ink); }
+  .tool-card .tc-name { font: var(--fs-xs) var(--mono); color: var(--faint); }
+  .tool-card pre {
+    margin: 0; padding: 9px 11px; border: none; border-top: 1px solid var(--line);
+    border-radius: 0; background: var(--panel-2); font: var(--fs-xs)/1.55 var(--mono);
+    color: var(--muted); white-space: pre-wrap; word-break: break-word; overflow-x: auto;
+  }
 
   .typing { display: inline-flex; gap: 4px; padding: 4px 2px; }
   .typing i { width: 6px; height: 6px; border-radius: 50%; background: var(--faint); animation: blink 1.2s infinite; }
   .typing i:nth-child(2) { animation-delay: .18s; }
   .typing i:nth-child(3) { animation-delay: .36s; }
-  @keyframes blink { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
 
   /* ================= composer ================= */
-  .dock { flex: none; border-top: 1px solid var(--line); padding: 16px 48px 20px;
-          background: color-mix(in srgb, var(--bg) 82%, transparent); backdrop-filter: blur(12px); }
-  .composer { width: 100%; max-width: 900px; max-width: clamp(680px, 58vw, 1000px); margin: 0 auto; }
+  .dock { flex: none; border-top: 1px solid var(--line); padding: 14px clamp(16px, 3vw, 40px) 18px;
+          background: color-mix(in srgb, var(--bg) 84%, transparent); backdrop-filter: blur(12px); }
+  .composer { width: 100%; max-width: var(--thread); margin: 0 auto; }
   .box {
     display: flex; align-items: flex-end; gap: 10px; background: var(--panel);
-    border: 1px solid var(--line); border-radius: 16px; padding: 12px 12px 12px 18px;
+    border: 1px solid var(--line); border-radius: 16px; padding: 10px 10px 10px 16px;
     transition: border-color .18s, box-shadow .18s;
   }
-  .box:focus-within { border-color: var(--sage); box-shadow: 0 0 0 3px rgba(147,168,142,.18); }
+  .box:focus-within { border-color: var(--sage); box-shadow: var(--ring); }
   textarea {
-    flex: 1; background: none; border: none; outline: none; resize: none;
-    color: var(--ink); font: 15px/1.6 var(--sans); min-height: 44px; max-height: 200px; padding: 8px 0;
+    flex: 1; background: none; border: none; outline: none; resize: none; color: var(--ink);
+    font: var(--fs-base)/1.6 var(--sans); min-height: 26px; max-height: 40vh; padding: 9px 0;
   }
   textarea::placeholder { color: var(--faint); }
   #send {
-    flex: none; width: 42px; height: 42px; border-radius: 12px; border: none; cursor: pointer;
-    background: linear-gradient(135deg, var(--sage), var(--dusk)); color: #fff; font-size: 18px;
-    line-height: 42px; text-align: center; transition: transform .12s, filter .15s, opacity .15s;
+    flex: none; width: 40px; height: 40px; border-radius: 12px; border: none; cursor: pointer;
+    background: linear-gradient(135deg, var(--sage), var(--dusk)); color: var(--on-accent);
+    display: flex; align-items: center; justify-content: center; padding: 0;
+    transition: transform .12s, filter .15s, opacity .15s;
   }
+  #send svg { width: 19px; height: 19px; }
   #send:hover:not(:disabled) { filter: brightness(1.06); transform: translateY(-1px); }
   #send:active:not(:disabled) { transform: scale(.94); }
-  #send:disabled { opacity: .4; cursor: default; }
-  .hint { text-align: center; font: 11.5px var(--mono); color: var(--faint); margin-top: 9px; letter-spacing: .03em; }
+  #send:disabled { opacity: .38; cursor: default; }
+  .hint { text-align: center; font: var(--fs-xs) var(--mono); color: var(--faint);
+          margin-top: 8px; letter-spacing: .03em; }
 
-  /* ================= login gate ================= */
-  #gate { position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
-          background: radial-gradient(900px 500px at 15% -10%, rgba(147,168,142,.22), transparent 60%),
-                      radial-gradient(800px 500px at 90% 110%, rgba(138,162,176,.18), transparent 60%), var(--bg); }
-  .gate-card {
-    width: min(380px, calc(100vw - 40px)); background: var(--panel); border: 1px solid var(--line);
-    border-radius: 20px; padding: 34px 30px 28px; box-shadow: 0 30px 80px rgba(50,42,34,.25);
-    animation: rise .4s cubic-bezier(.2,.7,.3,1) both;
-  }
-  .gate-card .mark { width: 44px; height: 44px; border-radius: 13px; font-size: 22px; line-height: 44px;
-    text-align: center; color: #fff; background: linear-gradient(135deg, var(--sage), var(--dusk)); margin-bottom: 20px; }
-  .gate-card h1 { font-size: 18px; font-weight: 650; letter-spacing: .2px; }
-  .gate-card .sub { color: var(--muted); font-size: 13px; margin: 4px 0 18px; }
-  .field label { display: block; font: 11px var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); margin: 14px 0 6px; }
-  .field input {
-    width: 100%; background: var(--panel-2); border: 1px solid var(--line); border-radius: 11px;
-    padding: 11px 14px; color: var(--ink); font: 14px var(--sans); transition: border-color .15s, box-shadow .15s;
-  }
-  .field input:focus { outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px rgba(147,168,142,.18); }
-  .go { width: 100%; margin-top: 22px; padding: 12px; border: none; border-radius: 11px; cursor: pointer;
-        background: linear-gradient(135deg, var(--sage), var(--dusk)); color: #fff; font: 600 14px var(--sans);
-        transition: transform .12s, filter .15s; }
-  .go:hover { filter: brightness(1.06); }
-  .go:active { transform: scale(.98); }
-  .gate-msg { font-size: 12.5px; color: var(--err); margin-top: 12px; min-height: 16px; }
+  .only-narrow { display: none; }
+  .scrim { display: none; }
 
-  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
-  ::-webkit-scrollbar { width: 10px; }
-  ::-webkit-scrollbar-thumb { background: var(--line); border-radius: 5px; border: 2px solid transparent; background-clip: content-box; }
-  ::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
-
+  /* ================= narrow: the sidebar becomes a drawer ================= */
   @media (max-width: 760px) {
-    .sidebar { display: none; }
-    .top { padding: 10px 16px; }
-    .convo-inner { padding: 20px 14px; }
-    .dock { padding: 14px 14px 16px; }
+    .only-narrow { display: inline-block; }
+    .only-wide { display: none; }
+    .sidebar {
+      position: fixed; top: var(--nav-h); bottom: 0; left: 0; z-index: 30;
+      width: min(84vw, 320px); flex-basis: auto;
+      transform: translateX(-101%); transition: transform .22s cubic-bezier(.2,.7,.3,1);
+      box-shadow: 0 20px 60px rgba(40,34,28,.3);
+    }
+    .sidebar.open { transform: none; }
+    #sidebar-close { display: inline-block; }
+    .scrim { display: block; position: fixed; inset: var(--nav-h) 0 0; z-index: 25;
+             background: rgba(30,26,22,.34); opacity: 0; pointer-events: none; transition: opacity .2s; }
+    .scrim.open { opacity: 1; pointer-events: auto; }
+    .convo-inner { padding: 18px 14px 12px; }
+    .dock { padding: 10px 12px 14px; }
+    .msg.user .bubble { max-width: 88%; }
   }
 </style>
 </head>
-<body>
+<body data-page="chat">
 
-<!-- login gate -->
-<div id="gate">
-  <div class="gate-card">
-    <div class="mark">❄</div>
-    <h1>Sign in to ChillRAG</h1>
-    <p class="sub">Ask your documents. Answers cite the files and pages they come from.</p>
-    <div class="field"><label>Username</label><input id="user" autocomplete="username"></div>
-    <div class="field"><label>Password</label><input id="pass" type="password" autocomplete="current-password"></div>
-    <button class="go" id="login">Sign in</button>
-    <div class="gate-msg" id="gate-msg"></div>
-  </div>
-</div>
+<div class="gate" id="gate" hidden></div>
 
-<!-- app shell -->
-<div id="shell" style="display:none">
-  <aside class="sidebar">
-    <div class="brand"><span class="mark">❄</span>ChillRAG</div>
-    <button id="new-chat">＋ New chat</button>
-    <div class="sessions" id="sessions"></div>
-    <div class="side-foot"><span class="live"></span><span id="me">signed in</span> · <a href="/api-test">API console</a> · <a href="#" id="signout">sign out</a></div>
-  </aside>
-
-  <div class="main">
-    <header class="top">
-      <span class="label">Corpus</span>
-      <select id="source"></select>
-    </header>
-
-    <div class="convo" id="convo">
-      <div class="convo-inner" id="thread">
-        <div class="empty" id="empty">
-          <div class="flake">❄</div>
-          <h2>Ask your documents.</h2>
-          <p>Retrieval, reasoning and citation, grounded in your corpus.</p>
-          <div class="chips" id="chips"></div>
-        </div>
-      </div>
+<div id="shell" hidden>
+  <nav class="nav" id="nav">
+    <div class="nav-slot">
+      <button class="nav-icon only-narrow" id="sidebar-open" aria-label="Conversations">☰</button>
+      <span class="nav-label only-wide" data-i18n="nav.corpus"></span>
+      <select class="select" id="source"></select>
     </div>
+  </nav>
 
-    <div class="dock">
-      <div class="composer">
-        <div class="box">
-          <textarea id="question" rows="1" placeholder="Ask anything about the selected corpus…"></textarea>
-          <button id="send" title="Send">↑</button>
+  <div class="body">
+    <aside class="sidebar" id="sidebar">
+      <div class="side-head">
+        <button id="new-chat">＋ <span data-i18n="chat.new"></span></button>
+        <button class="nav-icon" id="sidebar-close" aria-label="Close">✕</button>
+      </div>
+      <input class="input" id="session-filter" hidden data-i18n-placeholder="sessions.filter">
+      <div class="sessions" id="sessions"></div>
+      <div class="side-foot"><span class="live"></span><span id="foot-note"></span></div>
+    </aside>
+    <div class="scrim" id="scrim"></div>
+
+    <div class="main">
+      <div class="convo" id="convo">
+        <div class="convo-inner" id="thread"></div>
+      </div>
+
+      <div class="dock">
+        <div class="composer">
+          <div class="box">
+            <textarea id="question" rows="1" data-i18n-placeholder="chat.composer.placeholder"></textarea>
+            <button id="send" data-i18n-title="chat.send" aria-label="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                   stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M12 19V5"/><path d="M5 12l7-7 7 7"/>
+              </svg>
+            </button>
+          </div>
+          <div class="hint" data-i18n="chat.composer.hint"></div>
         </div>
-        <div class="hint">answers cite files and pages · Enter to send · Shift+Enter for a newline</div>
       </div>
     </div>
   </div>
 </div>
+
+<!-- The empty state is written once and cloned into place: the text and the
+     example chips come from the dictionary, so a language switch redraws it. -->
+<template id="empty-tpl">
+  <div class="empty" id="empty">
+    <div class="flake">❄</div>
+    <h2 data-i18n="chat.empty.title"></h2>
+    <p data-i18n="chat.empty.sub"></p>
+    <div class="empty-cta" id="empty-cta" hidden>
+      <a class="btn btn-primary" href="/upload" data-i18n="chat.upload"></a>
+    </div>
+    <div class="chips" id="chips"></div>
+  </div>
+</template>
 
 <script src="/static/vendor/marked.min.js"></script>
 <script src="/static/vendor/purify.min.js"></script>
+<script src="/static/i18n.js"></script>
+<script src="/static/app.js"></script>
 <script>
 "use strict";
-const $ = (id) => document.getElementById(id);
-const SESSIONS_KEY = "chillrag.sessions";
 
-const EXAMPLES = [
-  "What was the total operating revenue in 2021?",
-  "Summarize the main risk factors.",
-  "List the top shareholders and their stakes.",
-];
-const TOOL_LABELS = { get_context: "Reading surrounding context…", get_toc: "Reading the table of contents…",
-  get_materials: "Listing documents…", calculate: "Calculating…" };
+const SESSIONS_KEY = "chillrag.sessions";
+const DRAFT_PREFIX = "chillrag.draft.";
+const ARM_MS = 3000;   // how long a delete button stays armed for a second click
 
 let current = { id: null, title: "", messages: [] };
 let sending = false;
+let confirming = null;   // id whose delete button is armed
+let armedTimer = null;
 
-/* ---------- bootstrap ---------- */
-(async () => {
-  if (await loadSources()) enter();
-})();
-$("pass").addEventListener("keydown", (e) => { if (e.key === "Enter") signIn(); });
-$("login").addEventListener("click", signIn);
-async function signIn() {
-  const msg = $("gate-msg"); msg.textContent = "";
-  const resp = await fetch("/space/api/passport/login", {
-    method: "POST", headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ username: $("user").value, passwd: $("pass").value }),
-  });
-  const body = await resp.json().catch(() => ({}));
-  if (resp.status !== 200 || body.code !== 0) {
-    msg.textContent = body.msg || ("Sign-in failed (" + resp.status + ")"); return;
-  }
-  if (await loadSources()) enter();
-}
-async function loadSources() {
-  const resp = await fetch("/space/api/service/asset-file/resource");
-  if (resp.status === 401) return false;
-  const body = await resp.json();
-  const sel = $("source"); sel.innerHTML = "";
-  for (const s of body.data || []) {
-    const opt = document.createElement("option");
-    opt.value = s.sourceId; opt.textContent = s.resourceName;
-    sel.appendChild(opt);
-  }
-  buildChips();
-  return true;
-}
-function enter() {
-  $("gate").style.display = "none";
-  $("shell").style.display = "flex";
-  renderSessions();
-  fetchMe();
-  $("question").focus();
-}
+/* ---------------------------- local history ---------------------------- */
 
-async function fetchMe() {
-  const resp = await fetch("/api/auth/me");
-  if (!resp.ok) return;
-  const me = (await resp.json()).data;
-  $("me").textContent = me.username + " · " + me.role;
-}
-function buildChips() {
-  const box = $("chips"); box.innerHTML = "";
-  for (const text of EXAMPLES) {
-    const chip = document.createElement("button");
-    chip.className = "chip"; chip.textContent = text;
-    chip.addEventListener("click", () => { $("question").value = text; $("question").focus(); });
-    box.appendChild(chip);
-  }
-}
-
-/* ---------- sessions (localStorage) ---------- */
 function sessions() {
   try { return JSON.parse(localStorage.getItem(SESSIONS_KEY) || "[]"); } catch { return []; }
 }
-function saveSessions(list) { localStorage.setItem(SESSIONS_KEY, JSON.stringify(list)); }
-function renderSessions() {
-  const box = $("sessions"); box.innerHTML = "";
-  const list = sessions().sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
-  if (!list.length) { box.innerHTML = '<div class="none">No conversations yet</div>'; return; }
-  for (const s of list) {
-    const row = document.createElement("div");
-    row.className = "session" + (s.id === current.id ? " active" : "");
-    const title = document.createElement("span"); title.className = "title";
-    title.textContent = s.title || "Untitled";
-    title.addEventListener("click", () => loadSession(s.id));
-    const del = document.createElement("button"); del.className = "del"; del.textContent = "✕";
-    del.addEventListener("click", (e) => { e.stopPropagation(); deleteSession(s.id); });
-    row.appendChild(title); row.appendChild(del);
-    box.appendChild(row);
+function saveSessions(list) {
+  try { localStorage.setItem(SESSIONS_KEY, JSON.stringify(list)); } catch { /* quota or private mode */ }
+}
+function draftKey(id) { return DRAFT_PREFIX + id; }
+function newId() { return "s" + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+/* The stored transcript is the truth; `current` is a view of it. An answer
+   that lands after the reader has switched conversations still belongs to the
+   conversation it was asked in. */
+function appendToSession(id, message) {
+  const list = sessions();
+  let session = list.find((item) => item.id === id);
+  if (!session) {
+    // A conversation that has only just been started is not stored yet, so the
+    // first message is also what puts it in the list.
+    if (current.id !== id) return;
+    session = { id, title: "", createdAt: Date.now(), updatedAt: 0, messages: [] };
+    list.push(session);
   }
-}
-function newChat() {
-  current = { id: null, title: "", messages: [] };
-  $("thread").innerHTML = "";
-  $("thread").appendChild(buildEmpty());
-  renderSessions();
-}
-function loadSession(id) {
-  const s = sessions().find((x) => x.id === id);
-  if (!s) return;
-  current = { id: s.id, title: s.title, messages: s.messages.slice() };
-  $("thread").innerHTML = "";
-  for (const m of s.messages) addMessage(m.role, m.content, false);
-  renderSessions();
-}
-function deleteSession(id) {
-  saveSessions(sessions().filter((x) => x.id !== id));
-  if (current.id === id) newChat(); else renderSessions();
-}
-function persist() {
-  if (!current.messages.length) return;
-  const now = Date.now();
-  let list = sessions().filter((x) => x.id !== current.id);
-  if (!current.id) current.id = "s" + now.toString(36);
-  if (!current.title) current.title = current.messages[0].content.slice(0, 40);
-  list.push({ id: current.id, title: current.title, updatedAt: now, messages: current.messages });
+  session.messages.push(message);
+  session.updatedAt = Date.now();
+  if (!session.title && message.role === "user") session.title = message.content.slice(0, 40);
   saveSessions(list);
+  if (current.id === id) {
+    current.messages = session.messages;
+    current.title = session.title;
+  }
   renderSessions();
 }
-function buildEmpty() {
-  const div = document.createElement("div");
-  div.className = "empty"; div.id = "empty";
-  div.innerHTML = '<div class="flake">❄</div><h2>Ask your documents.</h2>' +
-    '<p>Retrieval, reasoning and citation, grounded in your corpus.</p><div class="chips" id="chips"></div>';
-  return div;
+
+/* ------------------------------- sidebar ------------------------------- */
+
+const RELATIVE_DAYS = { today: "sessions.today", yesterday: "sessions.yesterday", earlier: "sessions.earlier" };
+
+function dayBucket(stamp) {
+  const day = 86400000;
+  const start = new Date(); start.setHours(0, 0, 0, 0);
+  if (stamp >= start.getTime()) return "today";
+  if (stamp >= start.getTime() - day) return "yesterday";
+  return "earlier";
 }
 
-/* ---------- messages ---------- */
-function addMessage(role, content, scroll = true) {
-  const empty = $("empty"); if (empty) empty.remove();
-  const msg = document.createElement("div");
-  msg.className = "msg " + role;
-  const b = document.createElement("div");
-  b.className = "bubble";
-  b.innerHTML = role === "user" ? escapeHtml(content) : render(content);
-  msg.appendChild(b);
-  if (role === "ai") addCopyBar(msg, () => b.innerText);
-  $("thread").appendChild(msg);
-  if (scroll) scrollEnd();
-  return msg;
+function renderSessions() {
+  const box = $("sessions");
+  box.innerHTML = "";
+  const query = ($("session-filter").value || "").trim().toLowerCase();
+  const list = sessions()
+    .filter((session) => !query || (session.title || "").toLowerCase().includes(query))
+    .sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0));
+
+  $("session-filter").hidden = sessions().length <= 8;
+  $("foot-note").textContent = t("sessions.foot", { n: sessions().length });
+  if (!list.length) {
+    const none = document.createElement("div");
+    none.className = "none";
+    none.textContent = query ? t("sessions.noMatch") : t("sessions.none");
+    box.appendChild(none);
+    return;
+  }
+
+  let bucket = null;
+  for (const session of list) {
+    const where = dayBucket(session.updatedAt || 0);
+    if (where !== bucket) {
+      bucket = where;
+      const head = document.createElement("div");
+      head.className = "group";
+      head.textContent = t(RELATIVE_DAYS[where]);
+      box.appendChild(head);
+    }
+    box.appendChild(sessionRow(session));
+  }
 }
 
-function addCopyBar(container, getText) {
-  const bar = document.createElement("div");
-  bar.className = "actions";
-  const btn = document.createElement("button");
-  btn.className = "copy";
-  btn.textContent = "Copy";
-  btn.addEventListener("click", async () => {
-    try {
-      await navigator.clipboard.writeText(getText());
-      btn.textContent = "Copied ✓";
-      setTimeout(() => (btn.textContent = "Copy"), 1500);
-    } catch { /* clipboard unavailable (http/insecure context) */ }
+function sessionRow(session) {
+  const row = document.createElement("div");
+  row.className = "session" + (session.id === current.id ? " active" : "");
+  row.dataset.id = session.id;
+
+  const text = document.createElement("div");
+  text.className = "text";
+  const title = document.createElement("span");
+  title.className = "title";
+  title.textContent = session.title || t("sessions.untitled");
+  const when = document.createElement("span");
+  when.className = "when";
+  when.textContent = relativeTime(session.updatedAt || 0);
+  text.append(title, when);
+
+  const del = document.createElement("button");
+  del.className = "del" + (confirming === session.id ? " armed" : "");
+  del.textContent = confirming === session.id ? "!" : "✕";
+  del.title = confirming === session.id ? t("sessions.confirm") : t("sessions.delete");
+  del.addEventListener("click", (event) => {
+    event.stopPropagation();
+    if (confirming !== session.id) {
+      confirming = session.id;
+      if (armedTimer) clearTimeout(armedTimer);
+      armedTimer = setTimeout(() => { confirming = null; renderSessions(); }, ARM_MS);
+      renderSessions();
+      return;
+    }
+    confirming = null;
+    if (armedTimer) clearTimeout(armedTimer);
+    saveSessions(sessions().filter((item) => item.id !== session.id));
+    try { localStorage.removeItem(draftKey(session.id)); } catch { /* not fatal */ }
+    if (current.id === session.id) startNewSession(); else renderSessions();
   });
-  bar.appendChild(btn);
-  container.appendChild(bar);
-}
-function addAiPlaceholder() {
-  const empty = $("empty"); if (empty) empty.remove();
-  const msg = document.createElement("div");
-  msg.className = "msg ai";
-  const status = document.createElement("div"); status.className = "status";
-  status.innerHTML = '<span class="dot"></span>Thinking…';
-  const b = document.createElement("div"); b.className = "bubble";
-  b.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
-  msg.appendChild(status); msg.appendChild(b);
-  $("thread").appendChild(msg);
-  scrollEnd();
-  return { msg, status, bubble: b, raw: "" };
+
+  row.append(text, del);
+  row.addEventListener("click", () => openSession(session.id));
+  title.addEventListener("dblclick", (event) => { event.stopPropagation(); beginRename(row, session); });
+  return row;
 }
 
-/* ---------- asking ---------- */
-$("new-chat").addEventListener("click", newChat);
-$("signout").addEventListener("click", async (e) => {
-  e.preventDefault();
-  await fetch("/api/auth/logout", { method: "POST" });
-  location.reload();
-});
-$("send").addEventListener("click", ask);
-$("question").addEventListener("keydown", (e) => {
-  // Enter sends, Shift+Enter breaks the line; isComposing keeps the IME
-  // (pinyin) confirm key from sending mid-composition.
-  if (e.key === "Enter" && !e.shiftKey && !e.isComposing) {
-    e.preventDefault();
-    ask();
-  }
-});
-$("question").addEventListener("input", function () {
-  this.style.height = "auto";
-  this.style.height = Math.min(this.scrollHeight, 200) + "px";
-});
-
-async function ask() {
-  const q = $("question").value.trim();
-  if (!q || sending) return;
-  const sourceId = +$("source").value;
-  const history = current.messages.map((m) => ({ role: m.role, content: m.content }));
-  $("question").value = ""; $("question").style.height = "auto";
-  sending = true; $("send").disabled = true;
-
-  addMessage("user", q);
-  current.messages.push({ role: "user", content: q });
-  const ai = addAiPlaceholder();
-  const t0 = performance.now();
-  const tick = setInterval(() => {
-    if (ai.raw === "") ai.status.innerHTML = '<span class="dot"></span>Thinking… ' +
-      Math.round((performance.now() - t0) / 1000) + "s";
-  }, 500);
-
-  try {
-    const resp = await fetch("/api/chat/stream", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question: q, source_id: sourceId, history }),
-    });
-    if (resp.status !== 200) {
-      const body = await resp.json().catch(() => ({}));
-      throw new Error(body.msg || ("HTTP " + resp.status));
-    }
-    await readChatStream(resp, (ev) => {
-      if (ev.type === "tool") {
-        ai.status.innerHTML = '<span class="dot"></span>' + (TOOL_LABELS[ev.tool] || ("Working: " + ev.tool));
-      } else if (ev.type === "delta") {
-        ai.raw += ev.text;
-        ai.bubble.innerHTML = render(ai.raw);
-        ai.status.innerHTML = '<span class="dot"></span>Answering…';
-        scrollEnd();
-      } else if (ev.type === "error") {
-        ai.bubble.innerHTML = '<em style="color:var(--err)">' + escapeHtml(ev.message) + "</em>";
-      }
-    });
-    if (!ai.raw && ai.bubble.querySelector(".typing")) ai.bubble.innerHTML = "";
-    ai.status.style.display = "none";
-    addCopyBar(ai.msg, () => ai.bubble.innerText);
-    current.messages.push({ role: "assistant", content: ai.raw || "(no answer)" });
-  } catch (err) {
-    ai.bubble.innerHTML = '<em style="color:var(--err)">' + escapeHtml(err.message) + "</em>";
-    ai.status.style.display = "none";
-    current.messages.push({ role: "assistant", content: "⚠ " + err.message });
-  } finally {
-    clearInterval(tick);
-    sending = false; $("send").disabled = false;
-    persist(); scrollEnd(); $("question").focus();
-  }
-}
-
-async function readChatStream(resp, onEvent) {
-  const reader = resp.body.getReader();
-  const decoder = new TextDecoder();
-  let buf = "";
-  for (;;) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    buf += decoder.decode(value, { stream: true });
-    let idx;
-    while ((idx = buf.indexOf("\n\n")) !== -1) {
-      const raw = buf.slice(0, idx); buf = buf.slice(idx + 2);
-      for (const line of raw.split("\n")) {
-        if (!line.startsWith("data:")) continue;
-        const data = line.slice(5).trim();
-        if (data) onEvent(JSON.parse(data));
+function beginRename(row, session) {
+  const input = document.createElement("input");
+  input.className = "rename";
+  input.value = session.title || "";
+  let settled = false;   // Enter also blurs the field, which would commit twice
+  const commit = (keep) => {
+    if (settled) return;
+    settled = true;
+    if (keep) {
+      const list = sessions();
+      const stored = list.find((item) => item.id === session.id);
+      if (stored) {
+        stored.title = input.value.trim().slice(0, 80) || stored.title;
+        saveSessions(list);
+        if (current.id === session.id) current.title = stored.title;
       }
     }
-  }
+    renderSessions();
+  };
+  input.addEventListener("click", (event) => event.stopPropagation());
+  input.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") commit(true);
+    if (event.key === "Escape") commit(false);
+  });
+  input.addEventListener("blur", () => commit(true));
+  row.querySelector(".text").replaceChildren(input);
+  input.focus();
+  input.select();
 }
 
-function escapeHtml(s) {
-  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+function openSession(id) {
+  const session = sessions().find((item) => item.id === id);
+  if (!session) return;
+  current = { id: session.id, title: session.title, messages: session.messages.slice() };
+  closeDrawer();
+  paintThread();
+  renderSessions();
+  $("question").focus();
 }
+
+function startNewSession() {
+  current = { id: newId(), title: "", messages: [] };
+  closeDrawer();
+  paintThread();
+  renderSessions();
+  $("question").focus();
+}
+
+function paintThread() {
+  const thread = $("thread");
+  thread.innerHTML = "";
+  if (!current.messages.length) {
+    thread.appendChild(buildEmpty());
+  } else {
+    for (const message of current.messages) appendMessage(message, false);
+    scrollEnd();
+  }
+  restoreDraft();
+}
+
+/* ------------------------------ empty state ---------------------------- */
+
+function buildEmpty() {
+  const node = $("empty-tpl").content.firstElementChild.cloneNode(true);
+  applyI18n(node);
+  node.querySelector("#empty-cta").hidden = $("source").value !== "";
+  const chips = node.querySelector("#chips");
+  for (const example of t("chat.examples")) {
+    const chip = document.createElement("button");
+    chip.className = "chip";
+    chip.textContent = example;
+    chip.addEventListener("click", () => {
+      $("question").value = example;
+      autosize();
+      $("question").focus();
+    });
+    chips.appendChild(chip);
+  }
+  return node;
+}
+
+/* ------------------------------- messages ------------------------------ */
+
 function render(text) {
   if (window.marked && window.DOMPurify) {
     return DOMPurify.sanitize(marked.parse(text, { breaks: true }));
@@ -582,7 +530,344 @@ function render(text) {
     .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
     .replace(/`([^`]+)`/g, "<code>$1</code>");
 }
+
+/* An unterminated fence mid-stream would render as a broken block, so close it
+   for the preview pass only; the final render uses the text as it arrived. */
+function renderStreaming(text) {
+  const fences = (text.match(/```/g) || []).length;
+  return render(fences % 2 ? text + "\n```" : text);
+}
+
+function toolLabel(tool) {
+  const key = "tool." + tool;
+  const label = t(key);
+  return label === key ? (tool || t("tool.other")) : label;
+}
+
+function toolCard(entry) {
+  const card = document.createElement("details");
+  card.className = "tool-card";
+  const summary = document.createElement("summary");
+  const dot = document.createElement("span"); dot.className = "tc-dot";
+  const label = document.createElement("span"); label.className = "tc-label";
+  label.textContent = toolLabel(entry.tool);
+  const name = document.createElement("span"); name.className = "tc-name";
+  name.textContent = entry.tool || "";
+  summary.append(dot, label, name);
+  const args = document.createElement("pre");
+  args.textContent = entry.args === undefined || entry.args === null
+    ? "—" : JSON.stringify(entry.args, null, 2);
+  card.append(summary, args);
+  return card;
+}
+
+function renderTrace(message) {
+  const trace = document.createElement("div");
+  trace.className = "trace";
+  for (const entry of message.trace || []) trace.appendChild(toolCard(entry));
+  return trace;
+}
+
+function addCopyBar(container, getText) {
+  const bar = document.createElement("div");
+  bar.className = "actions";
+  const button = document.createElement("button");
+  button.className = "copy";
+  button.textContent = t("msg.copy");
+  button.addEventListener("click", async () => {
+    try {
+      await navigator.clipboard.writeText(getText());
+      button.textContent = t("msg.copied");
+      setTimeout(() => { button.textContent = t("msg.copy"); }, 1500);
+    } catch { /* clipboard unavailable outside a secure context */ }
+  });
+  bar.appendChild(button);
+  container.appendChild(bar);
+}
+
+/* A stored message, rebuilt for display. */
+function appendMessage(message, scroll) {
+  const empty = $("empty"); if (empty) empty.remove();
+  const node = document.createElement("div");
+  node.className = "msg " + (message.role === "assistant" ? "ai" : "user");
+  if (message.role === "assistant" && (message.trace || []).length) node.appendChild(renderTrace(message));
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = message.role === "user" ? escapeHtml(message.content) : render(message.content);
+  node.appendChild(bubble);
+  if (message.role === "assistant") addCopyBar(node, () => bubble.innerText);
+  $("thread").appendChild(node);
+  if (scroll !== false) scrollEnd();
+  return node;
+}
+
+/* The live turn: tool cards fill in above the bubble as the agent works. */
+function appendAnswer() {
+  const empty = $("empty"); if (empty) empty.remove();
+  const node = document.createElement("div");
+  node.className = "msg ai";
+  const status = document.createElement("div");
+  status.className = "status";
+  status.innerHTML = '<span class="dot"></span>' + escapeHtml(t("status.thinking"));
+  const trace = document.createElement("div");
+  trace.className = "trace";
+  const bubble = document.createElement("div");
+  bubble.className = "bubble";
+  bubble.innerHTML = '<span class="typing"><i></i><i></i><i></i></span>';
+  node.append(status, trace, bubble);
+  $("thread").appendChild(node);
+  scrollEnd();
+  return { node, status, trace, bubble, raw: "", entries: [], dirty: false, frame: null };
+}
+
+/* Streaming re-renders the whole answer, so throttle to one per frame: a long
+   answer arriving in many deltas would otherwise re-parse it dozens of times. */
+function scheduleRender(turn) {
+  turn.dirty = true;
+  if (turn.frame) return;
+  turn.frame = requestAnimationFrame(() => {
+    turn.frame = null;
+    if (!turn.dirty || !turn.node.isConnected) return;
+    turn.dirty = false;
+    turn.bubble.innerHTML = renderStreaming(turn.raw);
+    scrollEnd();
+  });
+}
+
+function setStatus(turn, key, vars) {
+  if (!turn.node.isConnected) return;
+  turn.status.innerHTML = '<span class="dot"></span>' + escapeHtml(t(key, vars));
+}
+
+/* --------------------------------- ask --------------------------------- */
+
+function autosize() {
+  const box = $("question");
+  box.style.height = "auto";
+  box.style.height = Math.min(box.scrollHeight, window.innerHeight * 0.4) + "px";
+}
+
+function restoreDraft() {
+  let draft = "";
+  try { draft = localStorage.getItem(draftKey(current.id)) || ""; } catch { /* not fatal */ }
+  $("question").value = draft;
+  autosize();
+  updateSend();
+}
+
+function saveDraft() {
+  try {
+    if ($("question").value) localStorage.setItem(draftKey(current.id), $("question").value);
+    else localStorage.removeItem(draftKey(current.id));
+  } catch { /* not fatal */ }
+}
+
+/* The send button reads the draft, so it says whether pressing it would send. */
+function updateSend() {
+  $("send").disabled = sending || !$("question").value.trim();
+}
+
+async function ask() {
+  const question = $("question").value.trim();
+  const sourceId = $("source").value;
+  if (!question || sending) return;
+  if (!sourceId) { $("question").focus(); return; }
+
+  // The turn is bound to this conversation now, whatever the reader does next.
+  const sessionId = current.id;
+  const history = current.messages
+    .filter((message) => message.role === "user" || message.role === "assistant")
+    .map((message) => ({ role: message.role, content: message.content }));
+
+  $("question").value = "";
+  autosize();
+  saveDraft();
+  sending = true;
+  updateSend();
+
+  const empty = $("empty"); if (empty) empty.remove();
+  appendMessage({ role: "user", content: question }, true);
+  appendToSession(sessionId, { role: "user", content: question });
+
+  const turn = appendAnswer();
+  const started = performance.now();
+  const ticker = setInterval(() => {
+    if (turn.raw) return;
+    setStatus(turn, "status.thinking", undefined);
+    const seconds = Math.round((performance.now() - started) / 1000);
+    if (turn.node.isConnected && seconds >= 2) {
+      turn.status.innerHTML = '<span class="dot"></span>' +
+        escapeHtml(t("status.thinking")) + " " + escapeHtml(t("status.elapsed", { n: seconds }));
+    }
+  }, 500);
+
+  try {
+    const response = await fetch("/api/chat/stream", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question, source_id: Number(sourceId), history }),
+    });
+    if (response.status !== 200) {
+      const body = await response.json().catch(() => ({}));
+      throw new Error(body.msg || ("HTTP " + response.status));
+    }
+    await readChatStream(response, (event) => {
+      if (event.type === "tool") {
+        const entry = { tool: event.tool, args: event.args };
+        turn.entries.push(entry);
+        if (turn.node.isConnected && !turn.raw) {
+          turn.trace.appendChild(toolCard(entry));
+          setStatus(turn, "status.working");
+          scrollEnd();
+        }
+      } else if (event.type === "delta") {
+        turn.raw += event.text;
+        if (turn.node.isConnected) {
+          scheduleRender(turn);
+          setStatus(turn, "status.answering");
+        }
+      } else if (event.type === "error") {
+        turn.failed = event.message;
+      }
+    });
+
+    if (turn.frame) { cancelAnimationFrame(turn.frame); turn.frame = null; }
+    if (turn.node.isConnected) {
+      turn.bubble.innerHTML = turn.failed
+        ? '<em class="failure">' + escapeHtml(turn.failed) + "</em>"
+        : render(turn.raw);
+      turn.status.remove();
+      if (!turn.failed) addCopyBar(turn.node, () => turn.bubble.innerText);
+      scrollEnd();
+    }
+    appendToSession(sessionId, {
+      role: "assistant",
+      content: turn.failed ? t("msg.noAnswer") : (turn.raw || t("msg.noAnswer")),
+      trace: turn.entries,
+    });
+  } catch (error) {
+    // The failure belongs on screen, not in the transcript: it is this
+    // browser's problem, and re-sending it as history would confuse the agent.
+    if (turn.frame) { cancelAnimationFrame(turn.frame); turn.frame = null; }
+    if (turn.node.isConnected) {
+      turn.bubble.innerHTML = '<em class="failure">' + escapeHtml(error.message) + "</em>";
+      turn.status.remove();
+    }
+  } finally {
+    clearInterval(ticker);
+    sending = false;
+    updateSend();
+    $("question").focus();
+  }
+}
+
+async function readChatStream(response, onEvent) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  const drain = (flush) => {
+    let cut;
+    while ((cut = buffer.indexOf("\n\n")) !== -1) {
+      const chunk = buffer.slice(0, cut);
+      buffer = buffer.slice(cut + 2);
+      for (const line of chunk.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data) onEvent(JSON.parse(data));
+      }
+    }
+    // A last event that arrived without its blank line would otherwise be lost.
+    if (flush && buffer.trim()) {
+      const lines = buffer; buffer = "";
+      for (const line of lines.split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const data = line.slice(5).trim();
+        if (data) onEvent(JSON.parse(data));
+      }
+    }
+  };
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    drain(false);
+  }
+  buffer += decoder.decode();
+  drain(true);
+}
+
+/* -------------------------------- shell -------------------------------- */
+
 function scrollEnd() { $("convo").scrollTop = $("convo").scrollHeight; }
+
+function openDrawer() { $("sidebar").classList.add("open"); $("scrim").classList.add("open"); }
+function closeDrawer() { $("sidebar").classList.remove("open"); $("scrim").classList.remove("open"); }
+
+async function loadSources() {
+  let sources = [];
+  try {
+    sources = await api("/space/api/service/asset-file/resource");
+  } catch {
+    // The composer and the transcript have to stay usable even when the list
+    // cannot be read; the selector then reads "no corpus" and points at /upload.
+  }
+  const select = $("source");
+  const wanted = new URLSearchParams(location.search).get("corpus");
+  select.innerHTML = "";
+  for (const source of sources) {
+    const option = document.createElement("option");
+    option.value = String(source.sourceId);
+    option.textContent = source.resourceName;
+    select.appendChild(option);
+  }
+  if (!sources.length) {
+    const option = document.createElement("option");
+    option.value = "";
+    option.textContent = t("chat.empty.none");
+    select.appendChild(option);
+  } else {
+    const known = sources.map((source) => String(source.sourceId));
+    if (known.includes(wanted)) select.value = wanted;
+  }
+  const empty = $("empty");
+  if (empty) empty.querySelector("#empty-cta").hidden = select.value !== "";
+  return sources.length > 0;
+}
+
+function wire() {
+  $("new-chat").addEventListener("click", startNewSession);
+  $("sidebar-open").addEventListener("click", openDrawer);
+  $("sidebar-close").addEventListener("click", closeDrawer);
+  $("scrim").addEventListener("click", closeDrawer);
+  $("send").addEventListener("click", ask);
+  $("session-filter").addEventListener("input", renderSessions);
+  $("question").addEventListener("input", () => { autosize(); saveDraft(); updateSend(); });
+  $("question").addEventListener("keydown", (event) => {
+    // Enter sends, Shift+Enter breaks the line; isComposing keeps the IME
+    // (pinyin) confirm key from sending mid-composition.
+    if (event.key === "Enter" && !event.shiftKey && !event.isComposing) {
+      event.preventDefault();
+      ask();
+    }
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") { closeDrawer(); }
+  });
+  window.addEventListener("chillrag:lang", () => {
+    paintThread();
+    renderSessions();
+  });
+  window.addEventListener("resize", () => { if (window.innerWidth > 760) closeDrawer(); });
+}
+
+(async () => {
+  await bootPage(async () => {
+    $("shell").hidden = false;
+    wire();
+    await loadSources();
+    startNewSession();
+  });
+})();
 </script>
 </body>
 </html>

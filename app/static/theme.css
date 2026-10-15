@@ -1,0 +1,206 @@
+/* Shared frame for every page the service serves.
+ *
+ * Holds the design tokens, the top nav, the login gate and the generic
+ * controls. Each page keeps its own layout CSS inline; only what two pages
+ * would otherwise restate belongs here.
+ *
+ * Everything is a local asset: the deployment is offline, so no webfont, no
+ * CDN, no external image. Fonts are the system stack plus CJK fallbacks — the
+ * server is Linux, where "PingFang SC" and "Microsoft YaHei" do not exist, so
+ * without them Chinese falls to whatever fontconfig happens to pick.
+ */
+
+:root {
+  /* Morandi — dusty, low-saturation, warm-leaning */
+  --bg: #efede8;
+  --sidebar: #e8e5df;
+  --panel: #f8f6f2;
+  --panel-2: #f2efe9;
+  --ink: #3b3732;
+  --muted: #7c766c;
+  --faint: #a39c91;
+  --line: #ddd8cf;
+  --sage: #93a88e;       --sage-deep: #7d9578;
+  --dusk: #8aa2b0;
+  --clay: #c2a08a;
+  --err: #b96a5f;
+  --ok: #7d9578;
+  --shadow: 0 1px 2px rgba(70,60,50,.05), 0 8px 28px rgba(70,60,50,.07);
+  --ring: 0 0 0 3px rgba(147,168,142,.18);
+  --on-accent: #fff;
+
+  /* Type scale. Sizes are tokens because the answer area, the sidebar and the
+     console all quote the same five steps. */
+  --fs-xs: 11.5px;
+  --fs-sm: 12.5px;
+  --fs-md: 14px;
+  --fs-base: 15px;
+  --fs-lg: 17px;
+  --fs-xl: 20px;
+  --lh: 1.72;
+
+  /* Latin faces first, then the CJK families that actually exist on Linux. */
+  --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue",
+          "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei",
+          "Noto Sans SC", "Source Han Sans SC", "Source Han Sans CN",
+          "WenQuanYi Micro Hei", "Noto Sans CJK SC", sans-serif;
+  --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas,
+          "Noto Sans Mono CJK SC", "WenQuanYi Micro Hei Mono", monospace;
+
+  --radius: 12px;
+  --radius-sm: 9px;
+  --nav-h: 52px;
+}
+
+/* Dark follows the system unless the reader has picked a side; the palette is
+   written twice because a media query cannot be joined to a selector. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #24211d; --sidebar: #1d1b18; --panel: #2b2823; --panel-2: #312d28;
+    --ink: #e9e4dc; --muted: #a49c90; --faint: #6f685e; --line: #3a352e;
+    --sage: #9db39a; --sage-deep: #aac0a6; --dusk: #9bb3c0; --clay: #c9a892;
+    --err: #d08a7c; --ok: #9db39a;
+    --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.35);
+    --ring: 0 0 0 3px rgba(157,179,154,.22);
+    --on-accent: #1d1b18;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #24211d; --sidebar: #1d1b18; --panel: #2b2823; --panel-2: #312d28;
+  --ink: #e9e4dc; --muted: #a49c90; --faint: #6f685e; --line: #3a352e;
+  --sage: #9db39a; --sage-deep: #aac0a6; --dusk: #9bb3c0; --clay: #c9a892;
+  --err: #d08a7c; --ok: #9db39a;
+  --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.35);
+  --ring: 0 0 0 3px rgba(157,179,154,.22);
+  --on-accent: #1d1b18;
+}
+
+* { box-sizing: border-box; margin: 0; }
+html { height: 100%; }
+body {
+  background: var(--bg); color: var(--ink);
+  font: var(--fs-base)/var(--lh) var(--sans);
+  -webkit-font-smoothing: antialiased;
+}
+/* Figures line up in tables and metric rows, as in the benchmark report. */
+.num, table, .metric { font-variant-numeric: tabular-nums; }
+code, pre, .mono { font-family: var(--mono); }
+a { color: var(--sage-deep); text-decoration: none; }
+a:hover { text-decoration: underline; }
+:focus-visible { outline: none; box-shadow: var(--ring); border-radius: var(--radius-sm); }
+
+@keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+@keyframes pulse { 0%,100% { opacity: .35; } 50% { opacity: 1; } }
+@keyframes blink { 0%,60%,100% { opacity: .25; transform: translateY(0); } 30% { opacity: 1; transform: translateY(-3px); } }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb {
+  background: var(--line); border-radius: 5px; border: 2px solid transparent; background-clip: content-box;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--faint); background-clip: content-box; }
+
+/* ============================== top nav ============================== */
+/* Pages keep their own markup inside #nav; this module prepends the brand and
+   links and appends the controls, so the middle stays the page's. */
+.nav {
+  flex: none; display: flex; align-items: center; gap: 14px;
+  height: var(--nav-h); padding: 0 18px; position: relative; z-index: 20;
+  border-bottom: 1px solid var(--line);
+  background: color-mix(in srgb, var(--bg) 82%, transparent);
+  backdrop-filter: blur(12px);
+}
+.nav-brand { display: flex; align-items: center; gap: 9px; font-weight: 650;
+             letter-spacing: .2px; color: var(--ink); text-decoration: none; flex: none; }
+.nav-brand:hover { text-decoration: none; }
+.mark {
+  width: 28px; height: 28px; border-radius: 8px; flex: none; font-size: 14px;
+  line-height: 28px; text-align: center; color: var(--on-accent);
+  background: linear-gradient(135deg, var(--sage), var(--dusk));
+}
+.nav-links { display: flex; align-items: center; gap: 3px; flex: none; }
+.nav-link {
+  font: 500 var(--fs-md) var(--sans); color: var(--muted); padding: 7px 12px;
+  border-radius: var(--radius-sm); border: none; background: none; cursor: pointer;
+  white-space: nowrap; text-decoration: none;
+}
+.nav-link:hover { color: var(--ink); background: var(--panel); text-decoration: none; }
+.nav-link[aria-current="page"] { color: var(--ink); background: var(--panel); box-shadow: inset 0 0 0 1px var(--line); }
+.nav-slot { flex: 1; display: flex; align-items: center; gap: 9px; min-width: 0; }
+.nav-right { display: flex; align-items: center; gap: 10px; flex: none; }
+.nav-right .who { font: var(--fs-xs) var(--mono); color: var(--faint); white-space: nowrap; }
+.nav-icon {
+  width: 30px; height: 30px; border-radius: 8px; cursor: pointer; flex: none;
+  border: 1px solid var(--line); background: var(--panel); color: var(--muted);
+  font: var(--fs-sm) var(--sans); line-height: 1; transition: color .15s, border-color .15s;
+}
+.nav-icon:hover { color: var(--ink); border-color: var(--sage); }
+.nav-label { font: var(--fs-xs) var(--mono); letter-spacing: .1em; text-transform: uppercase; color: var(--faint); }
+
+/* ========================= generic controls ========================= */
+.btn {
+  font: 600 var(--fs-md) var(--sans); border-radius: var(--radius-sm); cursor: pointer;
+  border: 1px solid var(--line); background: var(--panel); color: var(--ink);
+  padding: 9px 15px; transition: background .15s, border-color .15s, filter .15s;
+}
+.btn:hover:not(:disabled) { background: var(--panel-2); border-color: var(--sage); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn-primary {
+  border: none; color: var(--on-accent); font-weight: 600;
+  background: linear-gradient(135deg, var(--sage), var(--dusk));
+}
+.btn-primary:hover:not(:disabled) { filter: brightness(1.06); background: linear-gradient(135deg, var(--sage), var(--dusk)); }
+.btn-primary:active:not(:disabled) { transform: scale(.98); }
+.btn-quiet { border: none; background: none; color: var(--sage-deep); padding: 4px 2px; font-weight: 500; }
+.btn-quiet:hover:not(:disabled) { background: none; text-decoration: underline; }
+
+.select, .input {
+  font: var(--fs-md) var(--sans); color: var(--ink); background: var(--panel);
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  padding: 8px 12px; transition: border-color .15s, box-shadow .15s; max-width: 100%;
+}
+.select { cursor: pointer; }
+.select:focus, .input:focus { outline: none; border-color: var(--sage); box-shadow: var(--ring); }
+
+.card {
+  background: var(--panel); border: 1px solid var(--line); border-radius: 16px;
+  padding: 20px 22px; box-shadow: var(--shadow);
+}
+
+/* A row of label-over-control, the shape both the gate and the upload form use. */
+.field label { display: block; font: var(--fs-xs) var(--mono); letter-spacing: .1em;
+               text-transform: uppercase; color: var(--faint); margin-bottom: 6px; }
+.field .input, .field .select { width: 100%; }
+.field + .field { margin-top: 14px; }
+
+.notice { font-size: var(--fs-sm); color: var(--err); min-height: 1.4em; }
+.notice.ok { color: var(--ok); }
+
+/* ============================ login gate ============================ */
+/* Covers the page until the cookie check comes back, so a signed-out visitor
+   never sees the app behind it. */
+.gate {
+  position: fixed; inset: 0; z-index: 50; display: flex; align-items: center; justify-content: center;
+  padding: 20px;
+  background: radial-gradient(900px 500px at 15% -10%, rgba(147,168,142,.22), transparent 60%),
+              radial-gradient(800px 500px at 90% 110%, rgba(138,162,176,.18), transparent 60%), var(--bg);
+}
+.gate-card {
+  width: min(380px, 100%); background: var(--panel); border: 1px solid var(--line);
+  border-radius: 20px; padding: 34px 30px 28px; box-shadow: 0 30px 80px rgba(50,42,34,.25);
+  animation: rise .4s cubic-bezier(.2,.7,.3,1) both;
+}
+.gate-card .mark { width: 44px; height: 44px; border-radius: 13px; font-size: 22px; line-height: 44px; margin-bottom: 20px; }
+.gate-card h1 { font-size: var(--fs-lg); font-weight: 650; letter-spacing: .2px; }
+.gate-card .sub { color: var(--muted); font-size: var(--fs-sm); margin: 4px 0 18px; }
+.gate-card .go { width: 100%; margin-top: 22px; padding: 12px; }
+.gate-card .notice { margin-top: 12px; }
+.gate[hidden] { display: none; }
+
+/* ============================== narrow ============================== */
+@media (max-width: 760px) {
+  .nav { padding: 0 12px; gap: 8px; }
+  .nav-brand .name { display: none; }
+  .nav-right .who { display: none; }
+  .nav-link { padding: 7px 9px; }
+}

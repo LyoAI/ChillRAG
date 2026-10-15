@@ -171,7 +171,7 @@ class RAGTool:
 
     # ------------------------------------------------------- corpus setup --
 
-    def upload_file_complete(self, foldername: str) -> str | None:
+    def upload_file_complete(self, foldername: str, *, rebuild: bool = False) -> str | None:
         """Prepare a folder for retrieval: parse, chunk, index, expose.
 
         Idempotent and incremental: documents already ingested are reused and
@@ -182,6 +182,11 @@ class RAGTool:
         Args:
             foldername: A folder name under the materials root — one path
                 component, not a path.
+            rebuild: Discard the folder's derived artifacts and redo the whole
+                pipeline. The incremental path decides what to redo from the
+                source files' name, size and mtime, which no change to the
+                *processing* can be seen in — so this is the only way to pick
+                up a changed chunker, content-type tagging or embedding model.
 
         Returns:
             ``None`` on success. The original returns an error string; this
@@ -194,7 +199,7 @@ class RAGTool:
         """
         folder = _folder_name(foldername)
         self.foldername = folder
-        bundle = self._manager.ensure(folder)
+        bundle = self._manager.ensure(folder, rebuild=rebuild)
         self._attach(bundle)
         logger.info(
             "corpus %r ready: %d documents, %d chunks",

@@ -7,9 +7,11 @@ temp file and ``os.replace`` so a crash never leaves a half-written registry.
 
 import json
 import threading
+from collections.abc import Iterable
 from pathlib import Path
 
 from chillrag.config import CACHE_DIR
+from chillrag.rag_tool import file_id_for, source_id_for
 
 _LOCK = threading.Lock()
 _PATH = CACHE_DIR / "service_registry.json"
@@ -52,6 +54,25 @@ def register_file(file_id: int, source_id: int, name: str) -> None:
         state = _load()
         state["files"][str(file_id)] = {"source": source_id, "name": name}
         _save(state)
+
+
+def register_folder(folder: str, names: Iterable[str]) -> int:
+    """Register a folder and its documents, and return the folder's source id.
+
+    One read-modify-write for the lot: the load/mutate/save cycle is atomic per
+    write but not as a whole, so N separate registrations leave N windows in
+    which a concurrent writer — the service, registering a web upload — is
+    overwritten. Used by the ``app.ingest`` CLI, which has no service process to
+    serialise against.
+    """
+    source_id = source_id_for(folder)
+    with _LOCK:
+        state = _load()
+        state["sources"][str(source_id)] = folder
+        for name in names:
+            state["files"][str(file_id_for(name))] = {"source": source_id, "name": name}
+        _save(state)
+    return source_id
 
 
 def file_of(file_id: int) -> dict | None:

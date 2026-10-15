@@ -6,44 +6,15 @@
 <meta name="color-scheme" content="light dark">
 <title>ChillRAG · API console</title>
 <link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(%23g)"/><g stroke="%23ffffff" stroke-width="9" stroke-linecap="round"><path d="M50 22v56"/><path d="M26.5 35.5l47 29"/><path d="M26.5 64.5l47-29"/></g></svg>'>
+<link rel="stylesheet" href="/static/theme.css">
 <style>
-  :root {
-    --bg: #efede8; --panel: #f8f6f2; --panel-2: #f2efe9; --ink: #3b3732;
-    --muted: #7c766c; --faint: #a39c91; --line: #ddd8cf;
-    --sage: #93a88e; --sage-deep: #7d9578; --dusk: #8aa2b0; --clay: #c2a08a;
-    --err: #b96a5f; --ok: #7d9578;
-    --shadow: 0 1px 2px rgba(70,60,50,.05), 0 8px 28px rgba(70,60,50,.07);
-    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif;
-    --mono: ui-monospace, "SF Mono", "Cascadia Code", Menlo, Consolas, monospace;
-  }
-  @media (prefers-color-scheme: dark) {
-    :root { --bg: #24211d; --panel: #2b2823; --panel-2: #312d28; --ink: #e9e4dc;
-            --muted: #a49c90; --faint: #6f685e; --line: #3a352e;
-            --sage: #9db39a; --sage-deep: #aac0a6; --dusk: #9bb3c0; --clay: #c9a892;
-            --err: #d08a7c; --ok: #9db39a;
-            --shadow: 0 1px 2px rgba(0,0,0,.3), 0 10px 32px rgba(0,0,0,.35); }
-  }
-  * { box-sizing: border-box; margin: 0; }
-  body { background: var(--bg); color: var(--ink); font: 14.5px/1.7 var(--sans);
-         -webkit-font-smoothing: antialiased; padding-bottom: 80px; }
-  code, pre, .mono { font-family: var(--mono); }
-
-  /* ---------- top bar ---------- */
-  .top { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px;
-         padding: 12px 28px; border-bottom: 1px solid var(--line);
-         background: color-mix(in srgb, var(--bg) 80%, transparent); backdrop-filter: blur(12px); }
-  .mark { width: 30px; height: 30px; border-radius: 9px; flex: none; color: #fff; font-size: 15px;
-          line-height: 30px; text-align: center; background: linear-gradient(135deg, var(--sage), var(--dusk)); }
-  .brand { font-weight: 650; letter-spacing: .2px; }
-  .brand span { color: var(--faint); font-weight: 500; }
-  .top .spacer { flex: 1; }
-  .top select { font: 13px var(--sans); color: var(--ink); background: var(--panel);
-                border: 1px solid var(--line); border-radius: 9px; padding: 7px 11px; cursor: pointer; }
-  .top select:focus { outline: none; border-color: var(--sage); }
-  .top .who { font: 12px var(--mono); color: var(--muted); }
-  .top a, .top button.link { font: 12.5px var(--sans); color: var(--sage-deep); background: none;
-                             border: none; padding: 0; cursor: pointer; text-decoration: none; }
-  .top a:hover, .top button.link:hover { text-decoration: underline; }
+  body { padding-bottom: 80px; }
+  /* This page is a document, not an app frame, so the shared nav has to stick
+     to the top of the scrolling page rather than to a flex row. */
+  .nav { position: sticky; top: 0; }
+  .nav-slot .select { max-width: 280px; font-size: var(--fs-sm); padding: 6px 10px; }
+  .nav-slot .ref { font: var(--fs-sm) var(--sans); color: var(--sage-deep); white-space: nowrap; }
+  .nav-slot .ref:hover { text-decoration: underline; }
 
   main { max-width: 940px; margin: 0 auto; padding: 26px 24px 0; }
   .lede { color: var(--muted); font-size: 13.5px; margin-bottom: 22px; }
@@ -55,7 +26,7 @@
           padding: 20px 22px; margin-bottom: 16px; box-shadow: var(--shadow); }
   .head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .m { font: 600 10.5px var(--mono); letter-spacing: .08em; padding: 3px 8px; border-radius: 6px;
-       color: #fff; background: var(--dusk); flex: none; }
+       color: var(--on-accent); background: var(--dusk); flex: none; }
   .m.put { background: var(--clay); }
   .m.get { background: var(--sage); }
   .head code { font-size: 12.5px; color: var(--ink); word-break: break-all; }
@@ -73,13 +44,13 @@
     transition: border-color .15s, box-shadow .15s; }
   .field textarea { font: 13px var(--mono); resize: vertical; min-height: 62px; }
   .grid input:focus, .grid select:focus, .field input:focus, .field textarea:focus {
-    outline: none; border-color: var(--sage); box-shadow: 0 0 0 3px rgba(147,168,142,.18); }
+    outline: none; border-color: var(--sage); box-shadow: var(--ring); }
   .field { margin-top: 14px; }
   details.adv { margin-top: 14px; }
   details.adv summary { font: 12px var(--mono); color: var(--faint); cursor: pointer; }
 
   .row { display: flex; align-items: center; gap: 12px; margin-top: 16px; flex-wrap: wrap; }
-  .run { padding: 9px 20px; border: none; border-radius: 10px; cursor: pointer; color: #fff;
+  .run { padding: 9px 20px; border: none; border-radius: 10px; cursor: pointer; color: var(--on-accent);
          font: 600 13.5px var(--sans); background: linear-gradient(135deg, var(--sage), var(--dusk));
          transition: filter .15s, transform .12s; }
   .run:hover { filter: brightness(1.06); }
@@ -89,7 +60,7 @@
   .out { margin-top: 16px; border-top: 1px solid var(--line); padding-top: 14px; }
   .meta { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin-bottom: 10px; }
   .pill { font: 600 11px var(--mono); padding: 3px 9px; border-radius: 999px;
-          color: #fff; background: var(--ok); }
+          color: var(--on-accent); background: var(--ok); }
   .pill.bad { background: var(--err); }
   .pill.warn { background: var(--clay); }
   .meta .ms, .meta .ep { font: 11.5px var(--mono); color: var(--faint); }
@@ -112,18 +83,14 @@
   main > .foot { color: var(--faint); font: 11.5px var(--mono); text-align: center; padding: 26px 0 0; }
 </style>
 </head>
-<body>
+<body data-page="api">
 
-<header class="top">
-  <div class="mark">❄</div>
-  <div class="brand">ChillRAG <span>· API console</span></div>
-  <div class="spacer"></div>
-  <select id="corpus" title="Source used by the cards that need one"></select>
-  <span class="who" id="who">not signed in</span>
-  <a href="/">Chat</a>
-  <a href="/docs" target="_blank" rel="noopener">Swagger</a>
-  <button class="link" id="signout">sign out</button>
-</header>
+<nav class="nav" id="nav">
+  <div class="nav-slot">
+    <select class="select" id="corpus" title="Source used by the cards that need one"></select>
+    <a class="ref" href="/docs" target="_blank" rel="noopener">Swagger ↗</a>
+  </div>
+</nav>
 
 <main>
   <p class="lede">
@@ -297,7 +264,12 @@
   <div class="foot">every response is the vendor envelope — <code>{"code", "msg", "data"}</code></div>
 </main>
 
+<script src="/static/i18n.js"></script>
+<script src="/static/app.js"></script>
 <script>
+/* Wrapped: app.js owns the global names this page used to declare for itself
+   ($, esc), and two top-level `const $` in classic scripts is a SyntaxError. */
+(function () {
 "use strict";
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
@@ -381,13 +353,8 @@ function syncFilter() {
 }
 
 async function whoami() {
-  const r = await request("GET", "/api/auth/me");
-  if (r.status === 200) {
-    const me = JSON.parse(r.text).data;
-    $("who").textContent = `${me.username} · ${me.role}`;
-  } else {
-    $("who").textContent = "not signed in";
-  }
+  // Same call the shared nav makes; this page just refreshes it after a login.
+  return setIdentity(await currentUser());
 }
 
 /* ---------- the runners ---------- */
@@ -579,14 +546,16 @@ for (const button of document.querySelectorAll("button.run")) {
 
 $("login-pass").addEventListener("keydown", (e) => { if (e.key === "Enter") document.querySelector('[data-run="login"]').click(); });
 $("corpus").addEventListener("change", syncFilter);
-$("signout").addEventListener("click", async () => {
-  await request("POST", "/api/auth/logout");
-  $("who").textContent = "not signed in";
-  $("corpus").innerHTML = `<option value="">signed out</option>`;
-  $("login-hint").textContent = "signed out";
-});
 
-(async () => { await whoami(); await refreshSources(); })();
+// Sign-out, the language button and the theme toggle belong to app.js.
+// A signed-out visitor keeps the page rather than being gated: card 1 *is* the
+// login form, and every other card is meant to answer 401 so it can be seen.
+(async () => {
+  await bootPage(async () => {
+    await refreshSources();
+  });
+})();
+})();
 </script>
 </body>
 </html>
