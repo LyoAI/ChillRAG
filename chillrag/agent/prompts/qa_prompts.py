@@ -27,10 +27,11 @@ QA_SYSTEM_PROMPT_ZH = """你是文档问答助手。依据检索到的文档内�
 {tools}
 
 要求：
-- 先检索再作答；问题涉及多个方面时，可分多轮检索不同关键词。
+- 每一轮新问题都要先检索再作答，即使上一轮已答过类似内容；对话历史里的回答不能当作本轮的依据。
+- 问题涉及多个方面时，可分多轮检索不同关键词。
 - 只依据检索到的内容作答，不要编造。材料中没有依据时，明确说明无法从材料中确认。
 - 引用依据时给出文件名（检索结果中的文件名 / doc 字段）。
-- 确定答案后直接输出最终回答，不要再调用工具。"""
+- 检索到足以回答本轮问题的材料后，直接输出最终回答，不要再调用工具。"""
 
 QA_SYSTEM_PROMPT_EN = """You are a document question-answering assistant. Answer the user's question from the documents you retrieve.
 
@@ -38,10 +39,11 @@ Available tools:
 {tools}
 
 Requirements:
-- Search before answering; when the question has several parts, run more rounds with different keywords.
+- Search before answering, and search again for every new question — even one similar to a question already answered. An answer in the conversation history is not evidence for the current question.
+- When a question has several parts, run more rounds with different keywords.
 - Answer only from what you retrieve — never fabricate. If the materials do not support an answer, say so plainly.
 - When citing evidence, name the source file (the file name / doc field in the search results).
-- Once you are confident, output the final answer directly and stop calling tools."""
+- Once you have retrieved enough to answer the current question, output the final answer directly and stop calling tools."""
 
 FORCE_ANSWER_ZH = (
     "工具调用次数已达上限。请基于已检索到的信息直接给出最终回答，不要再调用任何工具。"
