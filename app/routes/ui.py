@@ -161,20 +161,23 @@ def upload(files: list[UploadFile] = [], folder: str | None = None, sourceId: in
 def _bundle(folder: str, state: str) -> CorpusBundle | None:
     """The folder's corpus for a status read, without ever waiting on an ingest.
 
-    ``find`` returns an already-loaded bundle only, so the common case — polling
-    a folder this process just ingested — costs nothing. The disk load is the
-    fallback for a finished folder this process has not seen (a restart), and is
-    skipped while a job is running: ``prepare`` holds the manager lock for the
-    whole parse and embed, so it would block for minutes rather than report.
+    ``try_get`` answers from the loaded map or loads from disk, and gives up
+    rather than waiting when the manager lock is held. That lock is what
+    ``prepare`` holds across a whole parse and embed, and it is on the singleton
+    rather than per folder — so ``find`` or ``get`` here would stall this poll
+    for minutes whenever *any* folder is ingesting, not only this one.
+
+    The counts are a courtesy to the upload page; ``state`` is what a client
+    acts on, and it comes from the job registry, which never blocks. So a
+    ``None`` bundle costs the caller its chunk counts, never its answer.
     """
-    manager = CorpusManager.instance()
-    bundle = manager.find(folder)
-    if bundle is None and state != "processing":
-        try:
-            bundle = manager.get(folder)
-        except (OSError, ValueError):
-            bundle = None
-    return bundle
+    if state == "processing":
+        return None
+
+    try:
+        return CorpusManager.instance().try_get(folder)
+    except (OSError, ValueError):
+        return None
 
 
 @router.get("/api/upload/status", dependencies=[Depends(require_user)])
@@ -198,6 +201,38 @@ def upload_status(sourceId: int):
         chunks += ingested
         rows.append({"name": path.name, "fileId": file_id_for(path.name), "chunks": ingested})
     return ok({"state": state, "documents": documents, "chunks": chunks, "files": rows})
+
+
+@router.post("/api/upload/ensure", dependencies=[Depends(require_user)])
+def ensure_ingest(sourceId: int):
+    """Make the source usable: register its documents, and ingest them if needed.
+
+    The client's attach path uploads only the files the service is missing, so a
+    folder whose documents are all present never reaches ``web-upload`` — and
+    that route and the upload page are the only two places a job is queued. A
+    folder with documents but no prepared corpus would otherwise stay that way
+    forever, which is what makes this the one call that closes that gap.
+
+    Registering is the other half. The per-file status route resolves each file
+    id through the registry and silently drops the ones it does not know, so a
+    folder whose documents were copied in rather than uploaded reports no status
+    at all — which the client cannot tell apart from "still parsing".
+
+    Does not wait: an ingest is minutes of parsing, so the reply reports where
+    things stand and the caller polls ``/api/upload/status`` for the rest.
+    """
+    folder = registry.folder_of(sourceId)
+    if folder is None:
+        raise HTTPException(status_code=404, detail=f"unknown source {sourceId}")
+
+    manager = CorpusManager.instance()
+    registry.register_folder(folder, [p.name for p in manager.source_docs(folder)])
+    # A failed job leaves no corpus behind and no job running, so it is re-queued
+    # the same way an unbuilt one is; a prepared folder is left alone, or asking
+    # about it would queue a redundant job behind whatever is ingesting now.
+    if jobs.status(folder) == "failed" or not manager.is_prepared(folder):
+        jobs.submit(folder)
+    return ok({"state": jobs.status(folder), "prepared": manager.is_prepared(folder)})
 
 
 class ChatBody(BaseModel):

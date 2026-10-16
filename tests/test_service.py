@@ -149,6 +149,103 @@ def test_upload_rejects_path_traversal_in_filename(client):
     assert not (asset_file.MATERIALS_DIR.parent / "escape.txt").exists()
 
 
+# --------------------------------------------- upload that changes nothing --
+
+def web_upload(client, source, *files):
+    """POST ``(name, content)`` pairs to the vendor upload route."""
+    return client.post(
+        f"/space/api/service/asset-file/web-upload?sourceId={source}",
+        files=[("files", (name, content, "text/plain")) for name, content in files],
+    )
+
+
+def source_for(client, folder):
+    return client.put("/space/api/service/asset-file/resource",
+                      json={"resourceName": folder}).json()["data"]
+
+
+class FakeManager:
+    """Stands in for ``CorpusManager``; ``is_prepared`` is the only thing asked."""
+
+    prepared = False
+
+    @classmethod
+    def instance(cls):
+        return cls
+
+    @classmethod
+    def is_prepared(cls, folder):
+        return cls.prepared
+
+
+def pretend_prepared(monkeypatch, prepared):
+    monkeypatch.setattr(asset_file, "CorpusManager", FakeManager)
+    monkeypatch.setattr(FakeManager, "prepared", prepared)
+
+
+def record_submits(monkeypatch):
+    submitted: list[str] = []
+    monkeypatch.setattr(jobs, "submit", submitted.append)
+    return submitted
+
+
+def test_re_uploading_an_unchanged_file_does_not_queue_a_job(client, monkeypatch):
+    """Re-uploading a ready corpus must not put it back in the queue.
+
+    ``submit`` flips the folder's status to ``processing`` at once and the job
+    lands behind whatever the single worker is parsing, so a no-op upload makes
+    a ready corpus *report* as un-ready until the queue drains. The client polls
+    that status, reads it as "still parsing", and gives up.
+    """
+    login(client)
+    source = source_for(client, "bank-a")
+    web_upload(client, source, ("report.txt", b"hello"))
+    wait_for_ingest("bank-a")
+
+    pretend_prepared(monkeypatch, True)
+    submitted = record_submits(monkeypatch)
+    web_upload(client, source, ("report.txt", b"hello"))
+    assert submitted == []
+
+
+def test_re_uploading_a_changed_file_queues_a_job(client, monkeypatch):
+    login(client)
+    source = source_for(client, "bank-a")
+    web_upload(client, source, ("report.txt", b"hello"))
+    wait_for_ingest("bank-a")
+
+    pretend_prepared(monkeypatch, True)
+    submitted = record_submits(monkeypatch)
+    web_upload(client, source, ("report.txt", b"goodbye"))
+    assert submitted == ["bank-a"]
+
+
+def test_uploading_a_new_file_queues_a_job(client, monkeypatch):
+    """The unchanged file must not mask the new one beside it."""
+    login(client)
+    source = source_for(client, "bank-a")
+    web_upload(client, source, ("report.txt", b"hello"))
+    wait_for_ingest("bank-a")
+
+    pretend_prepared(monkeypatch, True)
+    submitted = record_submits(monkeypatch)
+    web_upload(client, source, ("report.txt", b"hello"), ("extra.txt", b"x"))
+    assert submitted == ["bank-a"]
+
+
+def test_an_upload_to_a_folder_with_no_corpus_queues_a_job(client, monkeypatch):
+    """Nothing to keep in step with: the first upload always has work to do."""
+    login(client)
+    source = source_for(client, "bank-a")
+    web_upload(client, source, ("report.txt", b"hello"))
+    wait_for_ingest("bank-a")
+
+    pretend_prepared(monkeypatch, False)
+    submitted = record_submits(monkeypatch)
+    web_upload(client, source, ("report.txt", b"hello"))
+    assert submitted == ["bank-a"]
+
+
 # ------------------------------------------------------------- recall --
 
 def test_recall_parses_vendor_query_string(client):

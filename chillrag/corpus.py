@@ -198,15 +198,43 @@ class CorpusManager:
             FileNotFoundError: the folder has never been prepared.
         """
         with self._lock:
-            signature = self.signature(folder)
-            bundle = self._bundles.get(folder)
-            if bundle is not None and not reload:
-                if bundle.signature == signature:
-                    return bundle
-                logger.info("corpus %r changed on disk; reloading", folder)
-            loaded = self._load(folder, signature)
-            self._bundles[folder] = loaded
-            return loaded
+            return self._get_locked(folder, reload=reload)
+
+    def try_get(self, folder: str, *, reload: bool = False) -> CorpusBundle | None:
+        """``get``, but never waits for the manager lock.
+
+        ``prepare`` holds ``_lock`` across the whole parse and embed, and the
+        lock is on the singleton rather than per folder — so while *any* folder
+        is ingesting, ``get`` blocks for minutes even for a folder that is not
+        the one ingesting. A caller that only wants to report, rather than to
+        retrieve, is better served by an answer now.
+
+        Returns:
+            The bundle, or ``None`` when another thread holds the lock.
+
+        Raises:
+            FileNotFoundError: the folder has never been prepared. Raised only
+                when the lock was free, so it is a real answer rather than a
+                busy signal; ``None`` and this exception mean different things.
+        """
+        if not self._lock.acquire(blocking=False):
+            return None
+        try:
+            return self._get_locked(folder, reload=reload)
+        finally:
+            self._lock.release()
+
+    def _get_locked(self, folder: str, *, reload: bool = False) -> CorpusBundle:
+        """``get``'s body; the caller must hold ``_lock``."""
+        signature = self.signature(folder)
+        bundle = self._bundles.get(folder)
+        if bundle is not None and not reload:
+            if bundle.signature == signature:
+                return bundle
+            logger.info("corpus %r changed on disk; reloading", folder)
+        loaded = self._load(folder, signature)
+        self._bundles[folder] = loaded
+        return loaded
 
     def find(self, folder: str) -> CorpusBundle | None:
         """The loaded bundle for ``folder``, or ``None`` if it is not loaded.

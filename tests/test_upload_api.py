@@ -6,6 +6,7 @@ registry on disk, the ingest job and its status. A corpus is a real directory
 tree here, because the endpoint's whole job is to produce one.
 """
 
+import threading
 import time
 
 import pytest
@@ -226,6 +227,133 @@ def test_status_of_a_failed_ingest_is_failed(client, workspace, monkeypatch):
 
 def test_status_of_an_unknown_source_is_404(client):
     assert client.get("/api/upload/status", params={"sourceId": 1}).status_code == 404
+
+
+def test_status_reports_while_ingesting_instead_of_waiting(client, workspace, monkeypatch):
+    """A poll taken during an ingest must answer, not block on the parse.
+
+    ``prepare`` holds the manager lock for the whole parse and embed, so any
+    manager read during a job stalls for as long as that job runs — minutes, on
+    a real annual report — instead of reporting ``processing``.
+    """
+    source_id = upload(client, ("a.pdf", b"one"), folder="手册").json()["data"]["sourceId"]
+    wait_for_ingest("手册")
+
+    manager = CorpusManager.instance()
+    jobs._STATUS["手册"] = "processing"
+
+    def would_block(folder, **kwargs):
+        raise AssertionError("status read consulted the manager while a job was running")
+
+    monkeypatch.setattr(manager, "try_get", would_block)
+
+    data = client.get("/api/upload/status", params={"sourceId": source_id}).json()["data"]
+    assert data["state"] == "processing"
+    assert [f["name"] for f in data["files"]] == ["a.pdf"]
+
+
+def test_status_answers_while_another_folder_holds_the_manager_lock(client, workspace):
+    """The manager lock is global, so one folder's parse stalled every other poll.
+
+    ``CorpusManager._lock`` is on the singleton, not per folder: while any
+    folder is ingesting, a status read for a *different*, already-finished
+    folder waited for that parse to finish. Measured against a real corpus, that
+    was a 60s client timeout, which the client reads as "the service has no
+    files" and answers by re-uploading the lot.
+
+    The lock is held for the whole poll rather than released on a timer, so a
+    regression hangs here instead of quietly taking the timeout.
+    """
+    source_id = upload(client, ("a.pdf", b"one"), folder="手册").json()["data"]["sourceId"]
+    wait_for_ingest("手册")
+
+    manager = CorpusManager.instance()
+    held, release = threading.Event(), threading.Event()
+
+    def hold_the_lock():
+        with manager._lock:
+            held.set()
+            release.wait(30)
+
+    holder = threading.Thread(target=hold_the_lock)
+    holder.start()
+    assert held.wait(5), "holder thread never took the lock"
+
+    answer: dict = {}
+
+    def poll():
+        answer.update(client.get("/api/upload/status", params={"sourceId": source_id}).json()["data"])
+
+    poller = threading.Thread(target=poll)
+    poller.start()
+    poller.join(3)
+    answered = not poller.is_alive()
+    release.set()
+    holder.join()
+    poller.join(5)
+
+    assert answered, "the status poll blocked on the manager lock"
+    # The chunk counts are what a locked-out read has to give up; the answer is not.
+    assert answer["state"] == "finish"
+    assert [f["name"] for f in answer["files"]] == ["a.pdf"]
+
+
+# ---------------------------------------------------------------- ensure --
+
+def test_ensure_queues_an_ingest_for_a_folder_that_was_never_built(client, workspace):
+    """The state the client cannot fix on its own: documents present, no job queued.
+
+    ``upload`` queues a job, so drain it and drop what it built — which is what
+    a folder whose documents were copied onto the server rather than uploaded
+    looks like. The client uploads only what is missing, so it never reaches
+    ``web-upload``, which is the only other place a job is queued.
+    """
+    source_id = upload(client, ("a.pdf", b"one"), folder="手册").json()["data"]["sourceId"]
+    wait_for_ingest("手册")
+
+    manager = CorpusManager.instance()
+    manager._bundles.clear()
+    jobs._STATUS.clear()
+    assert manager.find("手册") is None
+
+    client.post("/api/upload/ensure", params={"sourceId": source_id})
+    wait_for_ingest("手册")
+    assert manager.find("手册") is not None
+
+
+def test_ensure_leaves_a_prepared_corpus_alone(client, workspace, monkeypatch):
+    """Asking about a ready corpus must not queue a job behind another ingest.
+
+    The job pool has one worker, so a redundant job would sit behind whatever is
+    parsing now and leave this folder reporting ``processing`` until it drained.
+    """
+    source_id = upload(client, ("a.pdf", b"one"), folder="手册").json()["data"]["sourceId"]
+    wait_for_ingest("手册")
+
+    monkeypatch.setattr(CorpusManager.instance(), "is_prepared", lambda folder: True)
+    submitted: list[str] = []
+    monkeypatch.setattr(jobs, "submit", submitted.append)
+
+    data = client.post("/api/upload/ensure", params={"sourceId": source_id}).json()["data"]
+    assert submitted == []
+    assert data["prepared"] is True
+
+
+def test_ensure_requeues_a_failed_ingest(client, workspace, monkeypatch):
+    """A failed job leaves no corpus and no running job, so it is queued again."""
+    source_id = upload(client, ("a.pdf", b"one"), folder="手册").json()["data"]["sourceId"]
+    wait_for_ingest("手册")
+
+    jobs._STATUS["手册"] = "failed"
+    submitted: list[str] = []
+    monkeypatch.setattr(jobs, "submit", submitted.append)
+
+    client.post("/api/upload/ensure", params={"sourceId": source_id})
+    assert submitted == ["手册"]
+
+
+def test_ensure_of_an_unknown_source_is_404(client):
+    assert client.post("/api/upload/ensure", params={"sourceId": 1}).status_code == 404
 
 
 # ---------------------------------------------------------------- config --
