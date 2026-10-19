@@ -1,0 +1,35 @@
+[Unit]
+Description=ChillRAG document retrieval service
+After=network.target
+
+[Service]
+Type=simple
+# The checkout that owns .venv/, materials/ and .cache/. Run it as the user
+# that created those: a different User= would hit permission errors on files
+# the first run wrote. Group= is left unset on purpose — systemd then uses the
+# account's own login group.
+WorkingDirectory=/path/to/ChillRAG
+User=<user>
+
+# systemd does not read ~/.bashrc, so both lines are load-bearing here:
+# - PATH must lead with the venv because the MinerU subprocess resolves the
+#   `mineru` executable via shutil.which (mineru_parse.py:_mineru_executable).
+# - UV_NO_SYNC=1 keeps any accidental `uv` invocation from re-syncing this
+#   environment against uv.lock, which would remove the hand-installed
+#   torch+cu121 wheels (they carry a +cu121 local version the lock does not).
+Environment=PATH=/path/to/ChillRAG/.venv/bin:/usr/local/bin:/usr/bin:/bin
+Environment=UV_NO_SYNC=1
+
+# workers must stay 1: the ingest job queue and the per-folder corpus bundles
+# are in-process state; --workers >1 would split them across processes.
+# .env, users.yaml and the CHILLRAG_* paths all anchor at the repo root, so
+# nothing else needs to be passed here.
+ExecStart=/path/to/ChillRAG/.venv/bin/python -m uvicorn app.main:create_app --factory --workers 1 --host 0.0.0.0 --port 9022
+
+# Come back after a crash or a power cut. Restart= never fights an explicit
+# `systemctl stop` — that still means stop.
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
