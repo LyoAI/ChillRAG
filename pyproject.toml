@@ -36,6 +36,9 @@ dependencies = [
     # Lexical BM25 over a Lucene index (needs a JVM at run time).
     "pyserini>=1.6.0",
 
+    # Chinese word segmentation for the BM25 index (pure Python, no binaries).
+    "jieba",
+
     # Document parsing via the local MinerU CLI.
     #
     # The `pipeline` extra installs the offline backend's own dependencies

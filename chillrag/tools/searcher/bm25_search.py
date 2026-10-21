@@ -1,9 +1,18 @@
-"""BM25 searcher backed by pyserini's Lucene index.
+"""BM25 searcher backed by pyserini's Lucene index, with jieba pretokenization.
 
 The Lucene index is derived from the DocumentStore at construction time and
 cached on disk (keyed by a content signature) so unchanged corpora reuse it.
 Scores come from Lucene BM25; text is always read back from the store, keeping
 the store the single source of truth.
+
+Chinese tokenization: chunks and queries are jieba-cut and space-joined, the
+index is built with Lucene's ``-pretokenized`` mode (WhitespaceTokenizer), and
+queries use a WhitespaceAnalyzer so terms align with the index — Lucene's
+default analyzers split Chinese into single characters (or overlapping
+bigrams) and neither does word segmentation, so any other analyzer here
+silently returns zero hits. ``ANALYZER_VERSION`` is recorded in the index dir;
+a tokenizer change (or an index built by an older release) forces a full
+rebuild rather than silently serving a stale index.
 """
 
 from __future__ import annotations
@@ -22,6 +31,7 @@ from chillrag.config import doc_cache_dir
 from chillrag.utils import get_logger
 from .base import BaseSearcher, Hit
 from .store import DocumentStore
+from .tokenizer import ANALYZER_VERSION, to_pretokenized
 
 logger = get_logger()
 
@@ -35,6 +45,15 @@ def _has_segments(index_dir: Path) -> bool:
     opening the dir with "no segments* file found".
     """
     return any(index_dir.glob("segments_*"))
+
+
+def _recorded_analyzer(index_dir: Path) -> str:
+    """The tokenizer version the existing index was built with ('' if none)."""
+    marker = index_dir / "analyzer_version.txt"
+    try:
+        return marker.read_text(encoding="utf-8").strip()
+    except OSError:
+        return ""
 
 
 class BM25Searcher(BaseSearcher):
@@ -67,7 +86,11 @@ class BM25Searcher(BaseSearcher):
         index_dir = Path(index_dir)
         index_dir.mkdir(parents=True, exist_ok=True)
 
-        if rebuild or not _has_segments(index_dir):
+        # Rebuild when the cached index is stale: no committed index, or it was
+        # built with a different tokenizer version (mixing tokenizers inside one
+        # Lucene index silently corrupts retrieval).
+        analyzer_stale = _recorded_analyzer(index_dir) != ANALYZER_VERSION
+        if rebuild or not _has_segments(index_dir) or analyzer_stale:
             t0 = perf_counter()
             logger.info(
                 "Building BM25 Lucene index for %d chunks at %s",
@@ -84,9 +107,20 @@ class BM25Searcher(BaseSearcher):
         from pyserini.search.lucene import LuceneSearcher
 
         self._searcher = LuceneSearcher(str(index_dir))
+        # The index is built with -pretokenized (jieba words space-joined), so
+        # the query analyzer must split on whitespace only. Any other analyzer
+        # re-tokenizes Chinese into single characters → 0 hits.
+        from pyserini.pyclass import autoclass
+
+        self._searcher.set_analyzer(
+            autoclass("org.apache.lucene.analysis.core.WhitespaceAnalyzer")()
+        )
 
     def _build_index(self, index_dir: Path) -> None:
         """Index every chunk as one Lucene document (id = chunk_id).
+
+        Contents are jieba-pretokenized (space-joined words) and indexed with
+        ``-pretokenized`` so each word survives as a single term.
 
         Build in a local temp dir first, then swap into ``index_dir``. Building
         directly on the target fails on network filesystems (NAS/SMB/NFS) that
@@ -102,9 +136,17 @@ class BM25Searcher(BaseSearcher):
         # Linux) or this same "No locks available" failure moves to the temp dir.
         build_dir = Path(tempfile.mkdtemp(prefix="bm25_build_"))
         try:
-            indexer = LuceneIndexer(index_dir=str(build_dir))
+            # With args passed, LuceneIndexer indexes from ``-index``; the
+            # ``-pretokenized`` flag feeds each ``contents`` through the
+            # WhitespaceTokenizer verbatim (the jieba cutting already happened).
+            indexer = LuceneIndexer(
+                str(build_dir), args=["-index", str(build_dir), "-pretokenized"]
+            )
             indexer.add_batch_dict(
-                [{"id": c.chunk_id, "contents": c.text} for c in self.store.all_chunks()]
+                [
+                    {"id": c.chunk_id, "contents": to_pretokenized(c.text)}
+                    for c in self.store.all_chunks()
+                ]
             )
             indexer.close()
             # Never swap a broken build: a committed index always has segments_*.
@@ -118,6 +160,9 @@ class BM25Searcher(BaseSearcher):
                 shutil.rmtree(index_dir)
             index_dir.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(build_dir), str(index_dir))
+            (index_dir / "analyzer_version.txt").write_text(
+                ANALYZER_VERSION, encoding="utf-8"
+            )
         except Exception as e:
             logger.warning("BM25 build failed for %r; discarding %s (%s)",
                            self.store.name, build_dir, e)
@@ -126,7 +171,12 @@ class BM25Searcher(BaseSearcher):
 
     def search(self, query: str, k: int) -> list[Hit]:
         t0 = perf_counter()
-        lucene_hits = self._searcher.search(query, k)
+        # Word-level tokenization must match the index build: jieba-cut then
+        # space-join, so the WhitespaceAnalyzer keeps each word as one term.
+        analyzed_query = to_pretokenized(query)
+        if not analyzed_query.strip():
+            return []
+        lucene_hits = self._searcher.search(analyzed_query, k)
         hits: list[Hit] = []
         for h in lucene_hits:
             chunk = self.store.get_chunk(h.docid)
