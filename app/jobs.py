@@ -6,13 +6,13 @@ already ingesting marks it dirty: that pass ends with an incomplete file set, so
 the job re-runs until it sees a stable folder.
 """
 
-import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor
 
 from chillrag.rag_tool import RAGTool
+from chillrag.utils import get_logger
 
-logger = logging.getLogger("chillrag.jobs")
+logger = get_logger()
 
 # One worker: ingest is GPU/CPU-bound and the embedder is a single shared model.
 _POOL = ThreadPoolExecutor(max_workers=1, thread_name_prefix="ingest")

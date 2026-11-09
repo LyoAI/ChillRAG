@@ -10,7 +10,6 @@ the account list and the secret.
 """
 
 import hmac
-import logging
 import os
 import re
 import secrets
@@ -21,7 +20,9 @@ from pathlib import Path
 import yaml
 from fastapi import HTTPException, Request
 
-logger = logging.getLogger("chillrag.auth")
+from chillrag.utils import get_logger
+
+logger = get_logger()
 
 COOKIE = "space-auth"
 TOKEN_TTL_S = 12 * 3600
