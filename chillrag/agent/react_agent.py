@@ -14,6 +14,11 @@ recorded on the trajectory.
 All prompt text lives in ``agent/prompts`` and is injected — the loop itself
 carries no wording, no output contract and no domain assumption. Callers shape
 the episode through ``system_prompt``, ``force_answer_msg`` and ``user_prompt``.
+One piece is history-scoped: a multi-turn episode (``history`` present) gets a
+retrieval reminder appended beside the question, because the transcript then
+shows only final answers and the model will otherwise imitate them instead of
+searching again. Its wording also lives in ``prompts``; the loop only decides
+when it applies.
 """
 
 from __future__ import annotations
@@ -27,7 +32,13 @@ from typing import Any, Callable
 from chillrag.llm import LLM, LLMResponse, ToolCallRequest
 from chillrag.tools import ToolRegistry
 from chillrag.utils import get_logger
-from .prompts import build_user_prompt, get_force_answer_msg, get_system_prompt, prompt_lang
+from .prompts import (
+    build_user_prompt,
+    get_force_answer_msg,
+    get_retrieval_reminder,
+    get_system_prompt,
+    prompt_lang,
+)
 
 logger = get_logger()
 
@@ -109,13 +120,27 @@ class ReActAgent:
         self.tool_concurrency = tool_concurrency
         self.temperature = temperature
         self.max_completion_tokens = max_completion_tokens
+        self.lang = prompt_lang(lang)  # validated here, reused by every prompt piece
 
         prompt = system_prompt or get_system_prompt(lang, instructions).format(
-            tools=tools.tool_hints(prompt_lang(lang))
+            tools=tools.tool_hints(self.lang)
         )
         self.system_prompt = prompt
-        self.force_answer_msg = force_answer_msg or get_force_answer_msg(lang)
+        self.force_answer_msg = force_answer_msg or get_force_answer_msg(self.lang)
         self.user_prompt = user_prompt
+
+    def _user_message(self, question: str, *, has_history: bool) -> dict[str, Any]:
+        """The question as the user message, plus the reminder when history exists.
+
+        A later turn's transcript shows only final answers — never the tool
+        rounds behind them — and that pattern pulls the model toward answering
+        from memory. The reminder (wording from ``prompts``) is appended after
+        everything else in the message, so it is also what the model reads last.
+        """
+        content = self.user_prompt(question) if self.user_prompt else build_user_prompt(question)
+        if has_history:
+            content = f"{content}\n\n{get_retrieval_reminder(self.lang)}"
+        return {"role": "user", "content": content}
 
     def run(self, question: str) -> AgentResult:
         """Sync convenience wrapper around the async loop."""
@@ -132,14 +157,7 @@ class ReActAgent:
         messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         for turn in history or []:
             messages.append({"role": turn["role"], "content": turn["content"]})
-        messages.append(
-            {
-                "role": "user",
-                "content": self.user_prompt(question)
-                if self.user_prompt
-                else build_user_prompt(question),
-            }
-        )
+        messages.append(self._user_message(question, has_history=bool(history)))
         trajectory: list[AgentTurn] = []
         total_tokens = 0
         num_tool_calls = 0
@@ -228,14 +246,7 @@ class ReActAgent:
         messages: list[dict[str, Any]] = [{"role": "system", "content": self.system_prompt}]
         for turn in history or []:
             messages.append({"role": turn["role"], "content": turn["content"]})
-        messages.append(
-            {
-                "role": "user",
-                "content": self.user_prompt(question)
-                if self.user_prompt
-                else build_user_prompt(question),
-            }
-        )
+        messages.append(self._user_message(question, has_history=bool(history)))
         num_tool_calls = 0
         terminated = "answer"
         tools = self.tools.definitions()

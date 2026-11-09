@@ -74,16 +74,16 @@ def _clamp_scope(scope: list[int], max_span: int) -> list[int]:
 # as ``<name>_search``); no workflow is implied — the model picks the tool.
 _TOOL_HINTS: dict[str, dict[str, str]] = {
     "grep_search": {
-        "zh": "字面关键词搜索，按单个关键词查询，优先用材料中出现的词",
-        "en": "literal keyword search; query with a single keyword, preferring terms that appear in the materials",
+        "zh": "字面精确搜索，每次查询材料中出现的单个词，适合数字、编号、专有名词等确切字符串",
+        "en": "literal exact search; query one term as it appears in the materials — exact strings like numbers, codes, proper nouns",
     },
     "bm25_search": {
-        "zh": "词法 BM25 搜索，适合多词查询",
-        "en": "lexical BM25 search, good for multi-word queries",
+        "zh": "词法（关键词）搜索，把问题拆成两三个关键词组合查询，适合词面能对上的内容",
+        "en": "lexical (keyword) search; split the question into two or three keywords — matches when wording overlaps",
     },
     "faiss_search": {
-        "zh": "语义（向量）搜索，适合问法与原文措辞不同时",
-        "en": "semantic (dense vector) search, for paraphrase/synonym phrasing",
+        "zh": "语义（向量）搜索，按问题含义匹配段落，适合问法与原文措辞不同、或关键词覆盖不到的内容",
+        "en": "semantic (dense vector) search; matches passages by meaning — for questions phrased differently from the text, where keywords fall short",
     },
     "get_context": {
         "zh": "读取 chunk 附近窗口的完整文本，用于确认搜索片段是否足够",
