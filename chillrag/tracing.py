@@ -65,6 +65,15 @@ ADHOC_SESSION = "_adhoc"
 #: the recording invisible to the answer path.
 _CONTEXT: ContextVar[dict[str, Any] | None] = ContextVar("chillrag_trace", default=None)
 
+#: Mutable slot holding the id of the episode most recently recorded under the
+#: current binding. A dict rather than a ``ContextVar[str]``: the agent records
+#: inside ``asyncio.run``, whose context copy would swallow a rebinding, while a
+#: mutation of this shared object is visible back in the caller — that is how a
+#: driver like ``batch_request`` learns the id of the trace it just caused.
+_LAST_RECORD: ContextVar[dict[str, Any] | None] = ContextVar(
+    "chillrag_trace_last", default=None
+)
+
 
 def _validate_name(name: str, kind: str) -> str:
     if not _NAME_RE.match(str(name)):
@@ -111,11 +120,25 @@ def episode(*, user: str, session_id: str | None = None, **fields: Any) -> Itera
     """
     fields["user"] = _validate_name(user, "user")
     fields["session_id"] = resolve_session(session_id)
+    slot: dict[str, Any] = {}
     token = _CONTEXT.set(fields)
+    slot_token = _LAST_RECORD.set(slot)
     try:
         yield
     finally:
+        _LAST_RECORD.reset(slot_token)
         _CONTEXT.reset(token)
+
+
+def last_trace_id() -> str | None:
+    """The id of the episode most recently recorded under this binding.
+
+    ``None`` outside an :func:`episode` block, and also when nothing was
+    recorded — an answer served from the cache never reaches the agent, so
+    there is no trace to name.
+    """
+    slot = _LAST_RECORD.get()
+    return slot.get("trace_id") if slot else None
 
 
 def record_episode(result: Any) -> None:
@@ -127,8 +150,9 @@ def record_episode(result: Any) -> None:
     context = _CONTEXT.get()
     if context is None:
         return
-    TraceLog.instance().write({
-        "trace_id": uuid4().hex,
+    trace_id = uuid4().hex
+    written = TraceLog.instance().write({
+        "trace_id": trace_id,
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **context,
         # The agent knows what it was asked; the identity only supplies who
@@ -144,6 +168,13 @@ def record_episode(result: Any) -> None:
         # (training, resume, audit) actually reads around.
         "messages": result.messages,
     })
+    if written:
+        # Only a record actually on disk gets to be named; reporting the id of
+        # a failed write would send a driver looking for a trace that is not
+        # there.
+        slot = _LAST_RECORD.get()
+        if slot is not None:
+            slot["trace_id"] = trace_id
 
 
 class TraceLog:
@@ -171,11 +202,14 @@ class TraceLog:
         self.compact_bytes = compact_bytes if compact_bytes is not None else TRACE_COMPACT_BYTES
         self._lock = threading.Lock()
 
-    def write(self, record: dict[str, Any]) -> None:
+    def write(self, record: dict[str, Any]) -> bool:
         """Append one record as a JSON line; never raises.
 
         Compaction runs behind the same lock, so a size read always sees the
         append it follows.
+
+        Returns:
+            Whether the line reached the file.
         """
         with self._lock:
             try:
@@ -184,11 +218,13 @@ class TraceLog:
                 with path.open("a", encoding="utf-8") as f:
                     f.write(json.dumps(record, ensure_ascii=False) + "\n")
                 self._compact_if_needed(path)
+                return True
             except (OSError, ValueError) as e:
                 logger.warning(
                     "trace not written for %s/%s: %s",
                     record.get("user"), record.get("session_id"), e,
                 )
+                return False
 
     def session_path(self, user: str, session_id: str | None) -> Path:
         """``<trace_dir>/<user>/<session>.jsonl`` for a record's identity."""

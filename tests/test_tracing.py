@@ -25,6 +25,7 @@ from chillrag.tracing import (
     ADHOC_SESSION,
     TraceLog,
     episode,
+    last_trace_id,
     record_episode,
     resolve_session,
 )
@@ -137,6 +138,24 @@ def test_outside_a_request_nothing_is_recorded(tmp_path):
     """Library use has no identity to attribute, so it stays untraced."""
     record_episode(_episode())
     assert not (tmp_path / "traces").exists()
+
+
+def test_last_trace_id_is_none_until_a_record_is_written(tmp_path):
+    assert last_trace_id() is None
+    with episode(user="alice", session_id="s1"):
+        assert last_trace_id() is None
+
+
+def test_last_trace_id_survives_the_agents_event_loop(tmp_path):
+    """The agent records inside ``asyncio.run``; its context copy must not
+    swallow the id the caller needs to join the answer to the trace."""
+    agent = ReActAgent(ScriptedLLM([_tool_round(), _final_round("答案")]), _registry())
+    with episode(user="svc", session_id="s1"):
+        asyncio.run(agent.arun("q"))
+        trace_id = last_trace_id()
+
+    (record,) = _lines(tmp_path / "traces" / "svc" / "s1.jsonl")
+    assert trace_id == record["trace_id"]
 
 
 def test_invalid_names_are_refused_at_the_boundary(tmp_path):

@@ -28,7 +28,10 @@ Questions run through ``answer_by_question`` — one ReAct episode each, many
 model calls apiece — behind a semaphore, so concurrency stays modest by
 default. Episodes trace themselves (``tracing.episode``); results stream to
 ``<input>.answers.jsonl`` (or ``--out``, ``.xlsx`` honored) as they complete.
-Corpora load from their prepared cache — a batch run answers, never re-parses.
+Each answers row carries the ``trace_id`` of the episode that produced it, so
+a result joins back to its transcript; a cache hit ran no episode and has no
+id. Corpora load from their prepared cache — a batch run answers, never
+re-parses.
 """
 
 from __future__ import annotations
@@ -47,7 +50,7 @@ from rich.table import Table
 
 from chillrag.corpus import CorpusManager
 from chillrag.rag_tool import RAGTool
-from chillrag.tracing import episode, new_session_id
+from chillrag.tracing import episode, last_trace_id, new_session_id
 from chillrag.utils import get_logger
 
 logger = get_logger()
@@ -74,6 +77,7 @@ class Outcome:
     answer: str
     duration_s: float
     error: str = ""
+    trace_id: str | None = None  # None when no episode ran (cache hit) or it failed
 
 
 # ------------------------------------------------------------------ input --
@@ -172,10 +176,15 @@ def _load_tool(folders: set[str]) -> RAGTool:
     return tool
 
 
-def _answer(tool: RAGTool, job: Job) -> str:
-    """The thread body: bind the row's identity, then one agent episode."""
+def _answer(tool: RAGTool, job: Job) -> tuple[str, str | None]:
+    """The thread body: bind the row's identity, then one agent episode.
+
+    Returns the answer and the id of the trace that episode wrote, so the
+    answers row can be joined back to its transcript.
+    """
     with episode(**job.context):
-        return tool.answer_by_question(job.question, **job.call_kwargs)
+        answer = tool.answer_by_question(job.question, **job.call_kwargs)
+        return answer, last_trace_id()
 
 
 async def run_batch(
@@ -192,7 +201,7 @@ async def run_batch(
         async with semaphore:
             start = time.perf_counter()
             try:
-                answer = await asyncio.to_thread(_answer, tool, job)
+                answer, trace_id = await asyncio.to_thread(_answer, tool, job)
             except Exception as exc:  # one bad question must not sink the batch
                 outcome = Outcome(job.index, "error", "",
                                   time.perf_counter() - start,
@@ -200,7 +209,7 @@ async def run_batch(
             else:
                 status = "ok" if answer.strip() else "empty"
                 outcome = Outcome(job.index, status, answer,
-                                  time.perf_counter() - start)
+                                  time.perf_counter() - start, trace_id=trace_id)
             logger.info("batch row %d: %s (%.1fs)", job.index + 1, outcome.status,
                         outcome.duration_s)
             if on_outcome:
@@ -216,6 +225,8 @@ def _record(job: Job, outcome: Outcome) -> dict[str, Any]:
     record = {"index": job.index, **job.context, "question": job.question,
               "answer": outcome.answer, "status": outcome.status,
               "duration_s": round(outcome.duration_s, 3)}
+    if outcome.trace_id:
+        record["trace_id"] = outcome.trace_id
     if outcome.error:
         record["error"] = outcome.error
     return record

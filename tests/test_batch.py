@@ -103,6 +103,22 @@ def test_every_row_traces_with_the_batch_source(fake_tool, tmp_path):
     assert records[0]["session_id"].startswith("batch-")
 
 
+def test_each_answer_row_names_the_trace_that_produced_it(fake_tool, tmp_path):
+    """A result joins back to its transcript by trace_id, not by guessing
+    which line in which session file matches the question."""
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}, {"question": "q2"}])
+    out = tmp_path / "out.jsonl"
+    batch_request.main([str(src), "--folder", "bank", "--out", str(out)])
+
+    trace_ids = set()
+    for path in (tmp_path / "traces").glob("*/*.jsonl"):
+        for line in path.read_text(encoding="utf-8").splitlines():
+            trace_ids.add(json.loads(line)["trace_id"])
+    answers = _answers(out)
+    assert len(trace_ids) == 2
+    assert {r["trace_id"] for r in answers} == trace_ids
+
+
 def test_row_identity_overrides_the_run_defaults(fake_tool, tmp_path):
     src = _jsonl(tmp_path / "q.jsonl", [
         {"question": "q1", "user": "alice", "session_id": "s-a"},
@@ -145,6 +161,7 @@ def test_one_bad_row_does_not_sink_the_batch(fake_tool, tmp_path):
     records = _answers(out)
     assert [r["status"] for r in records] == ["ok", "error", "ok"]
     assert "RuntimeError" in records[1]["error"]
+    assert "trace_id" not in records[1], "a failed row recorded no episode"
 
 
 def test_a_row_without_a_question_is_rejected_with_its_number(fake_tool, tmp_path):
