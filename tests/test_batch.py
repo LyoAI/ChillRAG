@@ -103,18 +103,16 @@ def test_every_query_traces_in_its_own_session(fake_tool, tmp_path):
     assert {r["session_id"] for r in _answers(out)} == sessions
 
 
-def test_the_session_flag_pins_every_row_to_one_session(fake_tool, tmp_path):
-    """An explicit --session-id is a request for one shared conversation file;
-    rows without one each get their own."""
-    src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}, {"question": "q2"}])
-    batch_request.main([str(src), "--folder", "bank", "--session-id", "pinned",
-                        "--out", str(tmp_path / "out.jsonl")])
+def test_a_rows_session_id_names_its_own_file(fake_tool, tmp_path):
+    """A session is a multi-turn conversation; a batch row is not one. A row's
+    session_id names that single episode's file — there is no batch-wide flag
+    that would merge rows into a shared conversation."""
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1", "session_id": "pinned"}])
+    batch_request.main([str(src), "--folder", "bank", "--out", str(tmp_path / "out.jsonl")])
 
     (path,) = (tmp_path / "traces" / "batch").glob("*.jsonl")
     assert path.name == "pinned.jsonl"
-    questions = sorted(json.loads(line)["question"]
-                       for line in path.read_text(encoding="utf-8").splitlines())
-    assert questions == ["q1", "q2"]
+    assert json.loads(path.read_text(encoding="utf-8"))["session_id"] == "pinned"
 
 
 def test_each_answer_row_names_the_trace_that_produced_it(fake_tool, tmp_path):

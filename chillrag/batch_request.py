@@ -11,13 +11,18 @@ field           flag         default
 question        --question-field (defaults to ``question``)   required
 folder          --folder     — error names the prepared corpora
 user            --user       ``batch`` (must be a filesystem-safe name)
-session_id      --session-id ``batch-<run>-<row>``, one per query
 source          --source     ``batch``
+session_id      — (row only) ``batch-<run>-<row>``, one per query
 lang / mode / instructions / output_instruction  — row overrides flag
 --------------- -----------  --------------------------------------------
 any other field —            rides along: bound as episode context and
                            echoed into the output rows
 =============== ===========  ============================================
+
+There is no ``--session-id``: a session is a multi-turn conversation, and a
+batch is not one. Every row is a single independent question, so it gets its
+own session file; a row that names a ``session_id`` names its own file with
+it, never merging rows into a shared conversation.
 
 ::
 
@@ -147,10 +152,10 @@ def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
             context[key] = value if isinstance(value, (str, int, float, bool)) else str(value)
         context.setdefault("user", "batch")
         context["user"] = str(context["user"])
-        # One session per query: a batch is a set of independent questions, so
-        # each episode's trace is its own file rather than one line among many.
-        # The run id in the name keeps a run's sessions together in a listing.
-        context.setdefault("session_id", args.session_id or f"batch-{run_id}-{index + 1:04d}")
+        # One session per query: a batch is a set of independent single-turn
+        # questions, so each episode's trace is its own file. The run id in
+        # the name keeps a run's sessions together in a listing.
+        context.setdefault("session_id", f"batch-{run_id}-{index + 1:04d}")
         context["session_id"] = str(context["session_id"])
         context.setdefault("source", "batch")
         context["folder"] = str(folder)
@@ -270,8 +275,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--question-field", default="question")
     parser.add_argument("--user", help="identity when a row has no user field")
     parser.add_argument("--source", default="batch")
-    parser.add_argument("--session-id",
-                        help="session for every row without one (default: one per query)")
     parser.add_argument("--lang", help="prompt language when a row has none")
     parser.add_argument("--mode", choices=("agent", "oneshot"),
                         help="answer mode when a row has none")
