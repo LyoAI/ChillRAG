@@ -12,7 +12,7 @@ question        --question-field (defaults to ``question``)   required
 folder          --folder     — error names the prepared corpora
 user            --user       ``batch`` (must be a filesystem-safe name)
 source          --source     ``batch``
-session_id      — (row only) ``batch-<run>-<row>``, one per query
+session_id      — (row only) ``batch-<session_id>``, one per query
 lang / mode / instructions / output_instruction  — row overrides flag
 --------------- -----------  --------------------------------------------
 any other field —            rides along: bound as episode context and
@@ -31,9 +31,8 @@ it, never merging rows into a shared conversation.
 
 Questions run through ``answer_by_question`` — one ReAct episode each, many
 model calls apiece — behind a semaphore, so concurrency stays modest by
-default. Each query traces as its own session, named after the run and the
-row, so every episode gets its own file while a run's sessions stay together
-in the directory. Results stream to ``<input>.answers.jsonl`` (or ``--out``,
+default. Each query traces as its own session, ``batch-<session_id>``, so one
+query is one file. Results stream to ``<input>.answers.jsonl`` (or ``--out``,
 ``.xlsx`` honored) as they complete. Each answers row carries the
 ``trace_id`` of the episode that produced it, so a result joins back to its
 transcript; a cache hit ran no episode and has no id. Corpora load from their
@@ -119,7 +118,6 @@ def _prepared_folders() -> list[str]:
 
 
 def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
-    run_id = new_session_id()
     jobs: list[Job] = []
     for index, row in enumerate(rows):
         raw = row.get(args.question_field)
@@ -153,9 +151,9 @@ def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
         context.setdefault("user", "batch")
         context["user"] = str(context["user"])
         # One session per query: a batch is a set of independent single-turn
-        # questions, so each episode's trace is its own file. The run id in
-        # the name keeps a run's sessions together in a listing.
-        context.setdefault("session_id", f"batch-{run_id}-{index + 1:04d}")
+        # questions, so each episode's trace is its own file — a session is a
+        # conversation, and no two rows share one.
+        context.setdefault("session_id", f"batch-{new_session_id()}")
         context["session_id"] = str(context["session_id"])
         context.setdefault("source", "batch")
         context["folder"] = str(folder)

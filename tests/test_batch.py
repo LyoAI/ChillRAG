@@ -90,16 +90,16 @@ def test_every_query_traces_in_its_own_session(fake_tool, tmp_path):
     code = batch_request.main([str(src), "--folder", "bank", "--out", str(out)])
     assert code == 0
 
-    # One session per query: two rows, two files, one episode each. The run id
-    # in the name keeps a run's sessions together in a listing.
+    # One session per query: two rows, two files, one episode each, each
+    # named batch-<session_id> with an id of its own.
     files = sorted((tmp_path / "traces" / "batch").glob("*.jsonl"))
     assert len(files) == 2, f"expected one session per query, found {files}"
     records = [json.loads(p.read_text(encoding="utf-8").strip()) for p in files]
     assert sorted(r["question"] for r in records) == ["q1", "q2"]
     assert all(r["source"] == "batch" and r["user"] == "batch" for r in records)
     sessions = {r["session_id"] for r in records}
-    assert len(sessions) == 2 and all(s.startswith("batch-") for s in sessions)
-    assert len({s.rsplit("-", 1)[0] for s in sessions}) == 1, "one run, one prefix"
+    assert len(sessions) == 2
+    assert all(s.startswith("batch-") and len(s) == len("batch-") + 12 for s in sessions)
     assert {r["session_id"] for r in _answers(out)} == sessions
 
 

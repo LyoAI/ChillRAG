@@ -162,7 +162,7 @@ question field is required. `user` / `source` / `folder` / `lang` / `mode` /
 flag → default (defaults: user `batch`, source `batch`); any other column
 rides along as episode context and is echoed into the output rows. Every query
 is a single-turn request and traces as its own session, named
-`batch-<run>-<row>` unless the row supplies a `session_id` — there is no
+`batch-<session_id>` unless the row supplies a `session_id` — there is no
 batch-wide session flag, because a session is a multi-turn conversation and a
 batch is not. Concurrency (`-c`, default 2) bounds the task queue, since each
 question is a full agent episode of many model calls. Results stream to
