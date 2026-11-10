@@ -11,7 +11,7 @@ field           flag         default
 question        --question-field (defaults to ``question``)   required
 folder          --folder     — error names the prepared corpora
 user            --user       ``batch`` (must be a filesystem-safe name)
-session_id      --session-id ``batch-<id>``, one per run
+session_id      --session-id ``batch-<run>-<row>``, one per query
 source          --source     ``batch``
 lang / mode / instructions / output_instruction  — row overrides flag
 --------------- -----------  --------------------------------------------
@@ -26,12 +26,13 @@ any other field —            rides along: bound as episode context and
 
 Questions run through ``answer_by_question`` — one ReAct episode each, many
 model calls apiece — behind a semaphore, so concurrency stays modest by
-default. Episodes trace themselves (``tracing.episode``); results stream to
-``<input>.answers.jsonl`` (or ``--out``, ``.xlsx`` honored) as they complete.
-Each answers row carries the ``trace_id`` of the episode that produced it, so
-a result joins back to its transcript; a cache hit ran no episode and has no
-id. Corpora load from their prepared cache — a batch run answers, never
-re-parses.
+default. Each query traces as its own session, named after the run and the
+row, so every episode gets its own file while a run's sessions stay together
+in the directory. Results stream to ``<input>.answers.jsonl`` (or ``--out``,
+``.xlsx`` honored) as they complete. Each answers row carries the
+``trace_id`` of the episode that produced it, so a result joins back to its
+transcript; a cache hit ran no episode and has no id. Corpora load from their
+prepared cache — a batch run answers, never re-parses.
 """
 
 from __future__ import annotations
@@ -113,7 +114,7 @@ def _prepared_folders() -> list[str]:
 
 
 def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
-    run_session = f"batch-{new_session_id()}"
+    run_id = new_session_id()
     jobs: list[Job] = []
     for index, row in enumerate(rows):
         raw = row.get(args.question_field)
@@ -146,7 +147,10 @@ def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
             context[key] = value if isinstance(value, (str, int, float, bool)) else str(value)
         context.setdefault("user", "batch")
         context["user"] = str(context["user"])
-        context.setdefault("session_id", run_session)
+        # One session per query: a batch is a set of independent questions, so
+        # each episode's trace is its own file rather than one line among many.
+        # The run id in the name keeps a run's sessions together in a listing.
+        context.setdefault("session_id", args.session_id or f"batch-{run_id}-{index + 1:04d}")
         context["session_id"] = str(context["session_id"])
         context.setdefault("source", "batch")
         context["folder"] = str(folder)
@@ -266,7 +270,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--question-field", default="question")
     parser.add_argument("--user", help="identity when a row has no user field")
     parser.add_argument("--source", default="batch")
-    parser.add_argument("--session-id", help="session when a row has none (default: one per run)")
+    parser.add_argument("--session-id",
+                        help="session for every row without one (default: one per query)")
     parser.add_argument("--lang", help="prompt language when a row has none")
     parser.add_argument("--mode", choices=("agent", "oneshot"),
                         help="answer mode when a row has none")
@@ -288,21 +293,27 @@ def main(argv: list[str] | None = None) -> int:
     if not xlsx_out:
         out_file = out_path.open("w", encoding="utf-8")
 
+    progress = Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
+                        BarColumn(), TextColumn("{task.completed}/{task.total}"),
+                        TimeElapsedColumn(), console=console) if console.is_terminal else None
+    task_id = None
+    if progress:
+        progress.start()
+        task_id = progress.add_task("answering", total=len(jobs))
+
     def on_outcome(outcome: Outcome) -> None:
         if not xlsx_out:
             job = jobs[outcome.index]
             out_file.write(json.dumps(_record(job, outcome), ensure_ascii=False,
                                       default=str) + "\n")
             out_file.flush()
+        if task_id is not None:
+            # One tick per finished episode. Rows are slow (many model calls
+            # each), so this is the only progress signal the run has.
+            progress.advance(task_id)
 
-    tool = _load_tool({job.folder for job in jobs})
-    progress = Progress(SpinnerColumn(), TextColumn("[progress.description]{task.description}"),
-                        BarColumn(), TextColumn("{task.completed}/{task.total}"),
-                        TimeElapsedColumn(), console=console) if console.is_terminal else None
-    if progress:
-        progress.start()
-        progress.add_task("answering", total=len(jobs))
     try:
+        tool = _load_tool({job.folder for job in jobs})
         outcomes = asyncio.run(run_batch(jobs, tool, concurrency=args.concurrency,
                                          on_outcome=on_outcome))
     finally:

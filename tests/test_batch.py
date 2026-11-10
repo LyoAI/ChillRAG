@@ -84,23 +84,37 @@ def test_a_batch_answers_every_row_in_order(fake_tool, tmp_path):
     assert records[0]["note"] == "hello", "unknown columns ride along to the output"
 
 
-def test_every_row_traces_with_the_batch_source(fake_tool, tmp_path):
+def test_every_query_traces_in_its_own_session(fake_tool, tmp_path):
     src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}, {"question": "q2"}])
     out = tmp_path / "out.jsonl"
     code = batch_request.main([str(src), "--folder", "bank", "--out", str(out)])
     assert code == 0
 
-    # The conftest fixture points TRACE_DIR into this test's tmp_path; rows
-    # without a session_id share the run's session file. Episodes finish in
-    # either order, so the file's lines are sorted before comparing.
-    files = list((tmp_path / "traces" / "batch").glob("*.jsonl"))
-    assert len(files) == 1, f"expected one run session, found {files}"
-    records = sorted(
-        (json.loads(line) for line in files[0].read_text(encoding="utf-8").splitlines()),
-        key=lambda r: r["question"])
-    assert [r["question"] for r in records] == ["q1", "q2"]
+    # One session per query: two rows, two files, one episode each. The run id
+    # in the name keeps a run's sessions together in a listing.
+    files = sorted((tmp_path / "traces" / "batch").glob("*.jsonl"))
+    assert len(files) == 2, f"expected one session per query, found {files}"
+    records = [json.loads(p.read_text(encoding="utf-8").strip()) for p in files]
+    assert sorted(r["question"] for r in records) == ["q1", "q2"]
     assert all(r["source"] == "batch" and r["user"] == "batch" for r in records)
-    assert records[0]["session_id"].startswith("batch-")
+    sessions = {r["session_id"] for r in records}
+    assert len(sessions) == 2 and all(s.startswith("batch-") for s in sessions)
+    assert len({s.rsplit("-", 1)[0] for s in sessions}) == 1, "one run, one prefix"
+    assert {r["session_id"] for r in _answers(out)} == sessions
+
+
+def test_the_session_flag_pins_every_row_to_one_session(fake_tool, tmp_path):
+    """An explicit --session-id is a request for one shared conversation file;
+    rows without one each get their own."""
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}, {"question": "q2"}])
+    batch_request.main([str(src), "--folder", "bank", "--session-id", "pinned",
+                        "--out", str(tmp_path / "out.jsonl")])
+
+    (path,) = (tmp_path / "traces" / "batch").glob("*.jsonl")
+    assert path.name == "pinned.jsonl"
+    questions = sorted(json.loads(line)["question"]
+                       for line in path.read_text(encoding="utf-8").splitlines())
+    assert questions == ["q1", "q2"]
 
 
 def test_each_answer_row_names_the_trace_that_produced_it(fake_tool, tmp_path):

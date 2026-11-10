@@ -159,16 +159,16 @@ file of questions through the agent, one traced episode each. Input is JSONL
 (one object per line) or an Excel sheet (first sheet, header row); only the
 question field is required. `user` / `session_id` / `source` / `folder` /
 `lang` / `mode` / `instructions` / `output_instruction` are optional metadata,
-resolved row → flag → default (defaults: user `batch`, one run-scoped session,
-source `batch`); any other column rides along as episode context and is echoed
-into the output rows. Concurrency (`-c`, default 2) bounds the task queue,
-since each question is a full agent episode of many model calls. Results
-stream to `<input>.answers.jsonl` as they complete (`--out` overrides, `.xlsx`
-honored, `index` restores input order); each row carries the `trace_id` of the
-episode that produced it, so a result joins back to its full transcript (a
-cache hit ran no episode and has none). Corpora load from the prepared cache —
-a batch run answers, never re-parses. Inspect a run with
-`python -m chillrag.utils.trace_view`.
+resolved row → flag → default (defaults: user `batch`, one session per query
+named `batch-<run>-<row>`, source `batch`); any other column rides along as
+episode context and is echoed into the output rows. Concurrency (`-c`, default
+2) bounds the task queue, since each question is a full agent episode of many
+model calls. Results stream to `<input>.answers.jsonl` as they complete
+(`--out` overrides, `.xlsx` honored, `index` restores input order); each row
+carries the `trace_id` of the episode that produced it, so a result joins back
+to its full transcript (a cache hit ran no episode and has none). Corpora load
+from the prepared cache — a batch run answers, never re-parses. Inspect a run
+with `python -m chillrag.utils.trace_view`.
 
 ## Endpoints
 
