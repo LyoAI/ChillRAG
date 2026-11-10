@@ -125,10 +125,25 @@ account, or changing the secret, does.
 | `CHILLRAG_AUTH_SECRET` | Token signing key (auto-generated if unset) |
 | `CHILLRAG_MATERIALS_DIR` | Where uploaded folders are written |
 | `CHILLRAG_CACHE_DIR` | Parsed documents, indexes and the service registry |
+| `CHILLRAG_TRACE_DIR` | Agent episode traces, one JSONL per session (default `traces/`; gitignored) |
+| `CHILLRAG_TRACE_COMPACT_BYTES` | Session file size that triggers compaction (default 10 MB) |
 | `CHILLRAG_LLM_PROVIDER`, `CHILLRAG_MODEL`, `CHILLRAG_LLM_CONFIG_DIR` | Answer model |
 | `EMBED_MODEL`, `EMBED_DEVICE` | Embedding model and device |
 
 The remaining knobs are documented in `chillrag/config.py`.
+
+## Traces
+
+Every agent episode records itself: a web-chat turn (`source: "web"`) or a
+vendor `post-answer` (`source: "api"`) lands as one JSON line in
+`<CHILLRAG_TRACE_DIR>/<user>/<session>.jsonl`. The vendor protocol carries no
+session id, so its episodes gather in `_adhoc.jsonl`. A record holds the full
+message transcript (system / user / assistant+tool_calls / tool), the answer,
+and episode scalars (tool calls, termination reason, token count, duration),
+so one line is a training sample, an audit entry, and enough context to resume
+the session. When a session file passes `CHILLRAG_TRACE_COMPACT_BYTES` it is
+compacted in place: older records keep their scalars (marked `"compacted"`)
+and only the newest keeps its transcript. Writing never fails a request.
 
 ## Endpoints
 

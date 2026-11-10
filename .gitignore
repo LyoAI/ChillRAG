@@ -4,6 +4,8 @@
 # Corpus inputs and every derived artifact (chunks, md, bm25, faiss)
 materials/
 .cache/
+# Agent episode traces (user questions + document text)
+traces/
 # Real model configs are machine-local; the committed *.example.yaml are templates.
 config/llm/*.yaml
 !config/llm/*.example.yaml

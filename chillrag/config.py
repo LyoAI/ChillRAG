@@ -144,6 +144,16 @@ CHUNK_MIN_TOKENS = int(os.getenv("CHUNK_MIN_TOKENS", "50"))
 # ---- Logging -------------------------------------------------------------
 LOG_LEVEL = os.getenv("CHILLRAG_LOG_LEVEL", os.getenv("DF_LOGGING_LEVEL", "INFO"))
 
+# ---- Tracing -------------------------------------------------------------
+# Agent episode traces, one JSONL file per session: <TRACE_DIR>/<user>/<session>.jsonl.
+# Records carry the full transcript (messages), so they double as training data
+# and as the context a session resume reads back. Gitignored — they hold user
+# questions and document text.
+TRACE_DIR = _path("CHILLRAG_TRACE_DIR", REPO_ROOT / "traces")
+# A session file past this size is compacted: old records keep their scalar
+# fields, the newest record keeps everything (it alone suffices to resume).
+TRACE_COMPACT_BYTES = int(os.getenv("CHILLRAG_TRACE_COMPACT_BYTES", str(10 * 1024 * 1024)))
+
 
 def doc_cache_dir(folder: str) -> Path:
     """Root for one folder's derived artifacts: MinerU output, materialized

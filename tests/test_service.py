@@ -427,6 +427,51 @@ def test_chat_stream_forwards_history(client, monkeypatch):
     assert captured["history"] == history
 
 
+def test_chat_stream_traces_the_episode(client, monkeypatch, tmp_path):
+    """The route binds the request identity; the episode records itself into
+    the session file (the fake stands in for the agent's own recording)."""
+    from chillrag.agent.react_agent import AgentEvent
+    from chillrag.tracing import record_episode
+
+    class _Result:
+        answer = "a"
+        num_tool_calls = 0
+        terminated = "answer"
+        total_tokens = 0
+        duration_s = 0.1
+        messages = [{"role": "user", "content": "q"}, {"role": "assistant", "content": "a"}]
+
+    async def fake_stream(question, **kwargs):
+        record_episode(_Result())  # what the real agent does when an episode ends
+        yield AgentEvent(kind="done", answer="a")
+
+    class FakeTool:
+        def answer_stream(self, question, **kwargs):
+            return fake_stream(question, **kwargs)
+
+    monkeypatch.setattr("app.routes.ui.attached_tool", lambda ids: FakeTool())
+    login(client)
+    with client.stream("POST", "/api/chat/stream",
+                       json={"question": "q", "source_id": 1, "session_id": "demo-1"}) as resp:
+        assert resp.status_code == 200
+        "".join(resp.iter_text())
+
+    # The conftest fixture points TRACE_DIR into this test's tmp_path.
+    path = tmp_path / "traces" / "svc" / "demo-1.jsonl"
+    record = json.loads(path.read_text(encoding="utf-8").splitlines()[0])
+    assert record["user"] == "svc" and record["session_id"] == "demo-1"
+    assert record["source"] == "web"
+    assert record["messages"] == _Result.messages
+
+
+def test_a_malformed_session_id_is_a_400(client, monkeypatch):
+    monkeypatch.setattr("app.routes.ui.attached_tool", lambda ids: None)
+    login(client)
+    response = client.post("/api/chat/stream",
+                           json={"question": "q", "source_id": 1, "session_id": "bad/name"})
+    assert response.status_code == 400
+
+
 def test_logout_expires_the_session(client):
     login(client)
     assert client.get("/space/api/service/asset-file/resource").status_code == 200

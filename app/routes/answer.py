@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.auth import require_user
 from app.corpus import attached_tool, folders_of
 from app.responses import fail
+from chillrag.tracing import episode
 
 router = APIRouter(prefix="/space/api/service/sse/llmapi/ht/text", dependencies=[Depends(require_user)])
 
@@ -39,20 +40,32 @@ def _stream(answer: str) -> Iterator[str]:
 
 
 @router.post("/post-answer")
-def post_answer(body: AnswerBody):
+def post_answer(body: AnswerBody, user=Depends(require_user)):
     try:
         source_ids = [int(key) for key in json.loads(body.source_category_filter)]
     except (ValueError, TypeError):
         return fail(400, "source_category_filter must be a JSON object keyed by source id")
+    folders = folders_of(source_ids)
     # One corpus per answer: a RAGTool holds one attached folder, so a second
     # would be dropped silently and the answer drawn from the wrong documents.
-    if len(folders_of(source_ids)) != 1:
+    if len(folders) != 1:
         return fail(400, "post-answer takes exactly one source")
     tool = attached_tool(source_ids)
-    try:
-        answer = tool.answer_by_question(body.question, source_id_list=source_ids)
-    except TimeoutError:
-        return fail(504, "answer timed out")
+    # The episode records itself; the vendor protocol carries no session id,
+    # so these land in the user's ``_adhoc.jsonl`` — attributed, just not
+    # conversation-linked. ``source`` marks them as API calls.
+    with episode(
+        user=user.username,
+        session_id=None,
+        folder=folders[0],
+        source="api",
+        question=body.question,
+        mode="agent",
+    ):
+        try:
+            answer = tool.answer_by_question(body.question, source_id_list=source_ids)
+        except TimeoutError:
+            return fail(504, "answer timed out")
     if not answer.strip():
         # The agent ends the episode with no answer when the model call itself
         # failed (bad key, no balance). Streaming the empty preamble under 200

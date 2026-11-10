@@ -19,6 +19,9 @@ retrieval reminder appended beside the question, because the transcript then
 shows only final answers and the model will otherwise imitate them instead of
 searching again. Its wording also lives in ``prompts``; the loop only decides
 when it applies.
+
+Every episode records its own trace on finishing (``chillrag.tracing``) —
+a no-op unless a request identity is bound around the answering call.
 """
 
 from __future__ import annotations
@@ -31,6 +34,7 @@ from typing import Any, Callable
 
 from chillrag.llm import LLM, LLMResponse, ToolCallRequest
 from chillrag.tools import ToolRegistry
+from chillrag.tracing import record_episode
 from chillrag.utils import get_logger
 from .prompts import (
     build_user_prompt,
@@ -67,6 +71,7 @@ class AgentResult:
     total_tokens: int
     terminated: str  # "answer" | "max_tool_calls" | "error"
     messages: list[dict[str, Any]] = field(default_factory=list)  # full transcript
+    duration_s: float = 0.0  # wall-clock time of the whole episode
 
 
 @dataclass
@@ -159,6 +164,7 @@ class ReActAgent:
             messages.append({"role": turn["role"], "content": turn["content"]})
         messages.append(self._user_message(question, has_history=bool(history)))
         trajectory: list[AgentTurn] = []
+        t0 = perf_counter()
         total_tokens = 0
         num_tool_calls = 0
         terminated = "answer"
@@ -224,7 +230,7 @@ class ReActAgent:
 
         last = next((m for m in reversed(messages) if m["role"] == "assistant"), None)
         answer = last["content"] if last and isinstance(last["content"], str) else ""
-        return AgentResult(
+        result = AgentResult(
             question=question,
             answer=answer,
             trajectory=trajectory,
@@ -232,7 +238,10 @@ class ReActAgent:
             total_tokens=total_tokens,
             terminated=terminated,
             messages=messages,
+            duration_s=round(perf_counter() - t0, 3),
         )
+        record_episode(result)
+        return result
 
     async def arun_stream(
         self, question: str, history: list[dict[str, Any]] | None = None
@@ -251,6 +260,10 @@ class ReActAgent:
         terminated = "answer"
         tools = self.tools.definitions()
         answer = ""
+        # The stream path has no usage in its chunks, so total_tokens stays 0.
+        trajectory: list[AgentTurn] = []
+        total_tokens = 0
+        t0 = perf_counter()
 
         while True:
             content_parts: list[str] = []
@@ -300,6 +313,7 @@ class ReActAgent:
             for tc, turn in zip(executed, turns):
                 num_tool_calls += 1
                 turn.step = num_tool_calls
+                trajectory.append(turn)
                 messages.append({"role": "tool", "tool_call_id": tc.id, "content": turn.tool_result})
                 yield AgentEvent(kind="tool", tool_name=turn.tool_name, tool_args=turn.tool_args)
 
@@ -311,6 +325,19 @@ class ReActAgent:
                 messages.append({"role": "user", "content": self.force_answer_msg})
                 terminated = "max_tool_calls"
 
+        # Same result object the sync path builds, so the trace shows one shape
+        # for both paths — recorded just before "done", so the transcript is
+        # durable when the consumer sees the episode as finished.
+        record_episode(AgentResult(
+            question=question,
+            answer=answer,
+            trajectory=trajectory,
+            num_tool_calls=num_tool_calls,
+            total_tokens=total_tokens,
+            terminated=terminated,
+            messages=messages,
+            duration_s=round(perf_counter() - t0, 3),
+        ))
         yield AgentEvent(
             kind="done", answer=answer, num_tool_calls=num_tool_calls, terminated=terminated
         )

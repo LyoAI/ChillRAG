@@ -705,7 +705,7 @@ async function ask() {
     const response = await fetch("/api/chat/stream", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ question, source_id: Number(sourceId), history }),
+      body: JSON.stringify({ question, source_id: Number(sourceId), history, session_id: sessionId }),
     });
     if (response.status !== 200) {
       const body = await response.json().catch(() => ({}));

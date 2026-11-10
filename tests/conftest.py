@@ -39,6 +39,16 @@ def _chunk(doc_id: str, order: int, text: str, types: list[str]) -> Chunk:
     )
 
 
+@pytest.fixture(autouse=True)
+def _trace_dir(tmp_path, monkeypatch):
+    """Traces land in a per-test directory: no test writes into the repo's
+    ``traces/``, and no TraceLog survives across tests rooted at stale paths."""
+    from chillrag import tracing
+
+    monkeypatch.setattr(tracing.TraceLog, "_instance", None)
+    monkeypatch.setattr(tracing, "TRACE_DIR", tmp_path / "traces")
+
+
 @pytest.fixture
 def corpus(tmp_path, monkeypatch):
     """A two-document corpus whose dense hits are fixed, wired into one tool.
