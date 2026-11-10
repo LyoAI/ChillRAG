@@ -147,6 +147,11 @@ the session. When a session file passes `CHILLRAG_TRACE_COMPACT_BYTES` it is
 compacted in place: older records keep their scalars (marked `"compacted"`)
 and only the newest keeps its transcript. Writing never fails a request.
 
+Inspect with `python -m chillrag.utils.trace_view [SESSION] [TRACE]`: it
+renders the trace directory into a self-contained `traces/report.html` — a
+filterable, searchable episode table with expandable transcripts and JSONL
+export — and opens it in the browser.
+
 ## Batch
 
 `python -m chillrag.batch_request questions.jsonl --folder 天津银行 -c 4` runs a
