@@ -136,8 +136,10 @@ The remaining knobs are documented in `chillrag/config.py`.
 
 Every agent episode records itself: a web-chat turn (`source: "web"`) or a
 vendor `post-answer` (`source: "api"`) lands as one JSON line in
-`<CHILLRAG_TRACE_DIR>/<user>/<session>.jsonl`. The vendor protocol carries no
-session id, so its episodes gather in `_adhoc.jsonl`. A record holds the full
+`<CHILLRAG_TRACE_DIR>/<user>/<session>.jsonl`. Every channel's records carry a
+real session id: the web page sends its own, and the vendor protocol — which
+has no session field — mints one per call (an explicit `None` falls back to
+`_adhoc.jsonl`). A record holds the full
 message transcript (system / user / assistant+tool_calls / tool), the answer,
 and episode scalars (tool calls, termination reason, token count, duration),
 so one line is a training sample, an audit entry, and enough context to resume

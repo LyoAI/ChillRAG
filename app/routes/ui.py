@@ -22,7 +22,7 @@ from chillrag.config import MATERIALS_DIR
 from chillrag.corpus import CorpusBundle, CorpusManager
 from chillrag.rag_tool import _folder_name, file_id_for, source_id_for
 from chillrag.tools.parser import SOURCE_SUFFIXES
-from chillrag.tracing import episode, resolve_session
+from chillrag.tracing import episode, new_session_id, resolve_session
 
 router = APIRouter()
 
@@ -263,7 +263,9 @@ def _payload(event) -> dict:
 async def chat_stream(body: ChatBody, user=Depends(require_user)):
     """Stream one answer as JSON SSE events: tool → delta… → done/error."""
     try:
-        session_id = resolve_session(body.session_id)
+        # Every channel's records carry a session id; a request without one
+        # (the page always sends it, but don't rely on the client) mints its own.
+        session_id = resolve_session(body.session_id or new_session_id())
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     tool = await run_in_threadpool(attached_tool, [body.source_id])
@@ -276,7 +278,6 @@ async def chat_stream(body: ChatBody, user=Depends(require_user)):
             session_id=session_id,
             folder=registry.folder_of(body.source_id),
             source="web",
-            question=body.question,
             mode="agent",
             lang=body.lang,
             instructions=body.instructions,

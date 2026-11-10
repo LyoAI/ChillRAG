@@ -97,19 +97,28 @@ def test_an_invalid_session_id_is_refused_not_mangled(bad):
         resolve_session(bad)
 
 
+def test_a_minted_session_id_is_valid_and_unique():
+    from chillrag.tracing import _NAME_RE, new_session_id
+
+    first, second = new_session_id(), new_session_id()
+    assert first != second
+    assert _NAME_RE.match(first), "minted ids must pass the same charset rule"
+
+
 # ---------------------------------------------------------------- records --
 
 def test_a_record_carries_context_scalars_and_the_transcript(tmp_path):
     result = _episode()
     with episode(user="alice", session_id="s1", folder="corpus", source="web",
-                 question="q", mode="agent", lang="zh", instructions=None):
+                 mode="agent", lang="zh", instructions=None):
         record_episode(result)
 
     # The conftest fixture points TRACE_DIR into this test's tmp_path.
     (record,) = _lines(tmp_path / "traces" / "alice" / "s1.jsonl")
     assert record["user"] == "alice" and record["session_id"] == "s1"
     assert record["source"] == "web"
-    assert record["folder"] == "corpus" and record["question"] == "q"
+    assert record["folder"] == "corpus"
+    assert record["question"] == result.question, "the question comes from the agent, not the binding"
     assert record["answer"] == "最终答案"
     assert record["num_tool_calls"] == 1 and record["terminated"] == "answer"
     assert record["total_tokens"] == 52 and "duration_s" in record

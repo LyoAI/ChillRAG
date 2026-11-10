@@ -15,8 +15,12 @@ API) — which the caller binds with :func:`episode` around the answering
 call. Outside a bound context (library use, scripts) recording is a no-op:
 an episode with no user behind it has nothing to be attributed to.
 
-The vendor ``post-answer`` protocol carries no session id; its episodes
-land in the ``_adhoc`` file of the calling user's directory.
+Every channel supplies an identity through this binding: the web app under
+the page's session id (``source: "web"``), the vendor ``post-answer`` under a
+freshly minted per-call id (``source: "api"`` — the protocol has no session
+field, but every record should still carry a real session). An explicit
+``None`` session falls back to the user's ``_adhoc`` file — the safety net
+for callers that trace but name no session.
 
 Compaction: a session file past ``TRACE_COMPACT_BYTES`` is rewritten with
 the newest record verbatim and every older record reduced to its scalar
@@ -51,7 +55,8 @@ logger = get_logger()
 #: username rule.
 _NAME_RE = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 
-#: File name for session-less episodes (the vendor answer path).
+#: File name for episodes bound with an explicit ``None`` session — the safety
+#: net for callers that trace but have no session to name.
 ADHOC_SESSION = "_adhoc"
 
 #: The request identity of the episode being answered, if any. Copies into
@@ -65,6 +70,16 @@ def _validate_name(name: str, kind: str) -> str:
     if not _NAME_RE.match(str(name)):
         raise ValueError(f"invalid trace {kind} {name!r}")
     return str(name)
+
+
+def new_session_id() -> str:
+    """A fresh session id for a channel that has none.
+
+    Every channel's records should carry a real session id, so an entry point
+    whose protocol has no session (the vendor ``post-answer``) mints one per
+    call here instead of letting records fall into ``_adhoc``.
+    """
+    return uuid4().hex[:12]
 
 
 def resolve_session(session_id: str | None) -> str:
@@ -116,6 +131,10 @@ def record_episode(result: Any) -> None:
         "trace_id": uuid4().hex,
         "ts": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         **context,
+        # The agent knows what it was asked; the identity only supplies who
+        # and from where. Taken from the result, so one episode() block can
+        # wrap a whole batch of differently-phrased questions.
+        "question": result.question,
         "answer": result.answer,
         "num_tool_calls": result.num_tool_calls,
         "terminated": result.terminated,

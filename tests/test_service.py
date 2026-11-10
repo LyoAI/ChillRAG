@@ -324,6 +324,16 @@ def test_post_answer_rejects_more_than_one_source(client):
     assert response.json()["msg"] == "post-answer takes exactly one source"
 
 
+def test_post_answer_rejects_a_malformed_session_id(client):
+    login(client)
+    registry.register_source(1, "bank-s")
+    response = client.post("/space/api/service/sse/llmapi/ht/text/post-answer",
+                           json={"question": "q", "source_category_filter": json.dumps({"1": []}),
+                                 "session_id": "bad/name"})
+    assert response.status_code == 400
+    assert "session_id" in response.json()["msg"]
+
+
 def test_post_answer_reports_a_failed_model_as_503(client, monkeypatch):
     """The agent returns nothing when the model call fails; 200 with an empty
     body would read as a blank answer rather than a broken service."""
@@ -434,6 +444,7 @@ def test_chat_stream_traces_the_episode(client, monkeypatch, tmp_path):
     from chillrag.tracing import record_episode
 
     class _Result:
+        question = "q"
         answer = "a"
         num_tool_calls = 0
         terminated = "answer"

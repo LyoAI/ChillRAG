@@ -16,6 +16,7 @@ from pydantic import BaseModel
 from app.auth import require_user
 from app.corpus import attached_tool, folders_of
 from app.responses import fail
+from chillrag.tracing import new_session_id, resolve_session
 from chillrag.tracing import episode
 
 router = APIRouter(prefix="/space/api/service/sse/llmapi/ht/text", dependencies=[Depends(require_user)])
@@ -27,6 +28,7 @@ class AnswerBody(BaseModel):
     question: str
     source_category_filter: str = "{}"  # JSON object keyed by source id, as the vendor sends it
     mode: int = 0  # accepted for compatibility; the agent has one mode
+    session_id: str | None = None  # not in the vendor protocol; honored when present
 
 
 def encode(text: str) -> str:
@@ -51,15 +53,19 @@ def post_answer(body: AnswerBody, user=Depends(require_user)):
     if len(folders) != 1:
         return fail(400, "post-answer takes exactly one source")
     tool = attached_tool(source_ids)
-    # The episode records itself; the vendor protocol carries no session id,
-    # so these land in the user's ``_adhoc.jsonl`` — attributed, just not
-    # conversation-linked. ``source`` marks them as API calls.
+    try:
+        # The vendor protocol carries no session, so each call traces under a
+        # freshly minted id — every channel's records then have a real session.
+        # A session sent anyway is honored.
+        session_id = resolve_session(body.session_id or new_session_id())
+    except ValueError as exc:
+        return fail(400, str(exc))
+    # The episode records itself; ``source`` marks these as API calls.
     with episode(
         user=user.username,
-        session_id=None,
+        session_id=session_id,
         folder=folders[0],
         source="api",
-        question=body.question,
         mode="agent",
     ):
         try:
