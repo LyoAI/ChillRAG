@@ -112,6 +112,7 @@ _TEMPLATE = """<!doctype html>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>ChillRAG Traces</title>
+<link rel="icon" href='data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><defs><linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="%2393a88e"/><stop offset="1" stop-color="%238aa2b0"/></linearGradient></defs><rect width="100" height="100" rx="26" fill="url(%23g)"/><g stroke="%23ffffff" stroke-width="9" stroke-linecap="round"><path d="M50 22v56"/><path d="M26.5 35.5l47 29"/><path d="M26.5 64.5l47-29"/></g></svg>'>
 <style>
 :root {
   --bg: #f3f5f8; --bg-card: #ffffff; --text: #101828; --muted: #667085;

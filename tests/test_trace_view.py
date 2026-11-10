@@ -60,6 +60,14 @@ def test_the_report_embeds_every_episode_and_its_transcript(session_file):
         "user", "assistant", "tool", "assistant"]
 
 
+def test_the_report_carries_the_app_favicon(session_file):
+    """The tab icon matches the app's static pages, so the report reads as
+    the same product rather than a stray local file."""
+    html = trace_view.render_traces_html(
+        trace_view._build_payload(trace_view._session_files(None)))
+    assert 'rel="icon"' in html and "data:image/svg+xml" in html
+
+
 def test_script_closing_tags_in_content_cannot_break_the_document(session_file, tmp_path):
     path = _session_dir(tmp_path) / "sneaky.jsonl"
     record = _record("</script><b>injected</b>", "a", "1234567890ab")
