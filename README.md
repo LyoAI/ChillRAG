@@ -147,6 +147,22 @@ the session. When a session file passes `CHILLRAG_TRACE_COMPACT_BYTES` it is
 compacted in place: older records keep their scalars (marked `"compacted"`)
 and only the newest keeps its transcript. Writing never fails a request.
 
+## Batch
+
+`python -m chillrag.batch_request questions.jsonl --folder 天津银行 -c 4` runs a
+file of questions through the agent, one traced episode each. Input is JSONL
+(one object per line) or an Excel sheet (first sheet, header row); only the
+question field is required. `user` / `session_id` / `source` / `folder` /
+`lang` / `mode` / `instructions` / `output_instruction` are optional metadata,
+resolved row → flag → default (defaults: user `batch`, one run-scoped session,
+source `batch`); any other column rides along as episode context and is echoed
+into the output rows. Concurrency (`-c`, default 2) bounds the task queue,
+since each question is a full agent episode of many model calls. Results
+stream to `<input>.answers.jsonl` as they complete (`--out` overrides, `.xlsx`
+honored, `index` restores input order). Corpora load from the prepared cache —
+a batch run answers, never re-parses. Inspect a run with
+`python -m chillrag.utils.trace_view`.
+
 ## Endpoints
 
 Everything except `/healthz` and login needs the `space-auth` cookie.
