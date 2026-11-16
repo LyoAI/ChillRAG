@@ -173,9 +173,12 @@ that produced it, so a result joins back to its full transcript (a cache hit
 ran no episode and has none). A row that raises is retried `--retries` times
 (default 2, short backoff) before it reports `status: "error"` with the
 exception; a retried row says how many `attempts` it took, and its `trace_id`
-names the attempt that worked. Corpora load from the prepared cache — a batch
-run answers, never re-parses. Inspect a run with
-`python -m chillrag.utils.trace_view`.
+names the attempt that worked. Failed rows go back through
+`python -m chillrag.utils.retry_failed <answers.jsonl>`: it writes a clean
+`<stem>.retry.jsonl` (question and the row's own metadata only) and prints
+the failure breakdown, so the follow-up batch call is one copy-paste. Corpora
+load from the prepared cache — a batch run answers, never re-parses. Inspect a
+run with `python -m chillrag.utils.trace_view`.
 
 ## Endpoints
 
