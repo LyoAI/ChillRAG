@@ -28,3 +28,6 @@ config/
 
 # Service accounts (plaintext passwords)
 users.yaml
+
+# offline installers fetched for intranet machines — never repo content
+.offline-downloads/
