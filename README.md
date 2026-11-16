@@ -149,8 +149,9 @@ and only the newest keeps its transcript. Writing never fails a request.
 
 Inspect with `python -m chillrag.utils.trace_view [SESSION] [TRACE]`: it
 renders the trace directory into a self-contained `traces/report.html` — a
-filterable, searchable episode table with expandable transcripts and JSONL
-export — and opens it in the browser.
+stats overview (tiles plus source/folder breakdowns that double as filters),
+a filterable, searchable episode table with expandable transcripts and JSONL
+export, sessions narrowed through a dropdown — and opens it in the browser.
 
 ## Batch
 

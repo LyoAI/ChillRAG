@@ -2,9 +2,12 @@
 
 Renders the trace directory into one self-contained HTML file — inline CSS/JS,
 zero external assets, renders offline anywhere — and opens it in the browser.
-Episodes appear as a filterable, searchable, sortable table; clicking a row
-expands the episode's scalars and its full message transcript. A ``TRACE``
-argument deep-links straight to one episode.
+An overview opens the page: stat tiles (episodes, sessions, answer rate,
+tokens, agent time) plus source/folder breakdowns that double as filters;
+sessions narrow through a toolbar dropdown, so hundreds of them cost one
+line. Below it, episodes appear as a filterable, searchable, sortable table;
+clicking a row expands the episode's scalars and its full message
+transcript. A ``TRACE`` argument deep-links straight to one episode.
 
     python -m chillrag.utils.trace_view                  # every session
     python -m chillrag.utils.trace_view SESSION [TRACE]  # narrowed, deep-linked
@@ -154,15 +157,22 @@ header.top h1 { font-size: 19px; margin: 0; }
 h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em;
   color: var(--muted); margin: 22px 2px 8px; }
 
-.sessions { display: flex; flex-direction: column; gap: 6px; }
-.session-chip { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: 10px;
-  padding: 7px 14px; cursor: pointer; font-size: 13px; }
-.session-chip:hover { border-color: var(--accent); }
-.session-chip.active { border-color: var(--accent); background: var(--accent-soft); }
-.session-chip .u { font-weight: 650; }
-.session-chip .s { font-weight: 600; }
-.session-chip .meta { color: var(--muted); font-size: 12px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+.tile { background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px;
+  padding: 10px 14px; }
+.tile .v { font-size: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile .k { font-size: 11px; text-transform: uppercase; letter-spacing: .07em;
+  color: var(--muted); margin-top: 2px; }
+.breakdown { display: flex; flex-wrap: wrap; gap: 6px 14px; margin-top: 10px; align-items: baseline; }
+.bgroup { display: flex; flex-wrap: wrap; gap: 6px; align-items: baseline; }
+.bgroup .lbl { font-size: 11px; text-transform: uppercase; letter-spacing: .07em; color: var(--muted); }
+.bchip { border: 1px solid var(--border); background: var(--bg-card); color: var(--muted);
+  border-radius: 999px; padding: 3px 12px; font-size: 12.5px; cursor: pointer; }
+.bchip b { color: var(--text); font-weight: 650; margin-left: 3px; }
+.bchip.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.bchip.active b { color: #fff; }
+.sel { border: 1px solid var(--border); background: var(--bg-card); color: var(--text);
+  border-radius: 8px; padding: 6px 10px; font-size: 13px; max-width: 300px; }
 
 .toolbar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin: 14px 0 10px; }
 .filters { display: flex; flex-wrap: wrap; gap: 6px; }
@@ -236,11 +246,13 @@ footer { margin-top: 22px; color: var(--muted); font-size: 12px; display: flex;
     <button class="theme-btn" id="theme-btn">🌙 Dark</button>
   </header>
 
-  <h2>Sessions</h2>
-  <div class="sessions" id="sessions"></div>
+  <h2>Overview</h2>
+  <div class="stats" id="stats"></div>
+  <div class="breakdown" id="breakdown"></div>
 
   <h2>Episodes <span id="shown-cnt"></span></h2>
   <div class="toolbar">
+    <select class="sel" id="session-sel"></select>
     <div class="filters" id="filters"></div>
     <button class="fbtn export" id="export-btn"
             title="Download the episodes currently in view as JSONL">⬇ Export JSONL</button>
@@ -277,7 +289,8 @@ footer { margin-top: 22px; color: var(--muted); font-size: 12px; display: flex;
   DATA.sessions.forEach(function (s) {
     s.episodes.forEach(function (e) { E.push(e); });
   });
-  var state = { session: null, filter: "all", query: "", sortKey: null, sortDir: 1 };
+  var state = { session: null, source: null, folder: null, filter: "all",
+                query: "", sortKey: null, sortDir: 1 };
   var openRows = {};
   var view = E;
 
@@ -300,36 +313,71 @@ footer { margin-top: 22px; color: var(--muted); font-size: 12px; display: flex;
       .replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
   }
   function fmtDur(s) { return s >= 1 ? s.toFixed(1) + "s" : Math.round(s * 1000) + "ms"; }
+  function fmtSpan(s) {
+    if (s >= 3600) return Math.floor(s / 3600) + "h " + Math.round((s % 3600) / 60) + "m";
+    if (s >= 60) return Math.floor(s / 60) + "m " + Math.round(s % 60) + "s";
+    return fmtDur(s);
+  }
 
-  // ---- header chips ----
+  // ---- header chip ----
+  document.getElementById("meta-chips").innerHTML =
+    '<span class="chip">trace dir: <b>' + esc(DATA.trace_dir) + "</b></span>";
+
+  // ---- overview: stat tiles + clickable source / folder breakdown ----
   var users = {};
   E.forEach(function (e) { users[e.user] = (users[e.user] || 0) + 1; });
-  var tokens = E.reduce(function (a, e) { return a + e.total_tokens; }, 0);
-  var chips = [["trace dir", DATA.trace_dir], ["users", Object.keys(users).length],
-               ["sessions", DATA.sessions.length], ["episodes", E.length],
-               ["tokens", tokens.toLocaleString()]];
-  document.getElementById("meta-chips").innerHTML = chips
-    .map(function (c) { return '<span class="chip">' + esc(c[0]) + ': <b>' + esc(c[1]) + "</b></span>"; })
-    .join("");
-
-  // ---- session list ----
-  var sessBox = document.getElementById("sessions");
-  sessBox.innerHTML = DATA.sessions.map(function (s, i) {
-    return '<div class="session-chip" data-i="' + i + '">' +
-      '<span class="u">' + esc(s.user) + '</span><span class="s mono">' + esc(s.session) + "</span>" +
-      '<span class="meta">' + s.n + " episodes · " + s.tokens.toLocaleString() + " tokens · " +
-      Math.round(s.seconds) + "s · " + s.kb + " KB · last " + esc(s.last) + "</span></div>";
+  var allTokens = E.reduce(function (a, e) { return a + e.total_tokens; }, 0);
+  var allSeconds = E.reduce(function (a, e) { return a + e.duration_s; }, 0);
+  var answered = E.filter(function (e) { return e.terminated === "answer" && !e.compacted; }).length;
+  var tiles = [
+    ["episodes", E.length],
+    ["sessions", DATA.sessions.length],
+    ["users", Object.keys(users).length],
+    ["answered", E.length ? Math.round(answered / E.length * 100) + "%" : "–"],
+    ["tokens", allTokens.toLocaleString()],
+    ["agent time", fmtSpan(allSeconds)],
+  ];
+  document.getElementById("stats").innerHTML = tiles.map(function (t) {
+    return '<div class="tile"><div class="v">' + esc(t[1]) + '</div><div class="k">' +
+      esc(t[0]) + "</div></div>";
   }).join("");
-  sessBox.onclick = function (e) {
-    var chip = e.target.closest(".session-chip");
-    if (!chip) return;
-    var s = DATA.sessions[+chip.dataset.i];
-    var key = s.user + "/" + s.session;
-    state.session = state.session === key ? null : key;
-    document.querySelectorAll(".session-chip").forEach(function (c) {
-      var other = DATA.sessions[+c.dataset.i];
-      c.classList.toggle("active", state.session === other.user + "/" + other.session);
+
+  function countsBy(key) {
+    var m = {};
+    E.forEach(function (e) { var v = e[key] || "-"; m[v] = (m[v] || 0) + 1; });
+    return Object.keys(m).sort(function (a, b) { return m[b] - m[a]; });
+  }
+  function breakdownGroup(label, key) {
+    return '<div class="bgroup"><span class="lbl">' + esc(label) + "</span>" +
+      countsBy(key).map(function (v) {
+        return '<button class="bchip" data-k="' + esc(key) + '" data-v="' + esc(v) + '">' +
+          esc(v) + "<b>" + E.filter(function (e) { return (e[key] || "-") === v; }).length +
+          "</b></button>";
+      }).join("") + "</div>";
+  }
+  document.getElementById("breakdown").innerHTML =
+    breakdownGroup("source", "source") + breakdownGroup("folder", "folder");
+  document.getElementById("breakdown").onclick = function (e) {
+    var c = e.target.closest(".bchip");
+    if (!c) return;
+    var k = c.dataset.k, v = c.dataset.v;
+    state[k] = state[k] === v ? null : v;
+    document.querySelectorAll('.bchip[data-k="' + k + '"]').forEach(function (x) {
+      x.classList.toggle("active", x.dataset.v === state[k]);
     });
+    render();
+  };
+
+  // ---- session narrowing: one select, however many sessions there are ----
+  var sel = document.getElementById("session-sel");
+  sel.innerHTML = '<option value="">All sessions — ' + E.length + " ep</option>" +
+    DATA.sessions.map(function (s) {
+      var key = s.user + "/" + s.session;
+      return '<option value="' + esc(key) + '">' +
+        esc(key) + " — " + s.n + " ep</option>";
+    }).join("");
+  sel.onchange = function () {
+    state.session = sel.value || null;
     render();
   };
 
@@ -434,6 +482,8 @@ footer { margin-top: 22px; color: var(--muted); font-size: 12px; display: flex;
     var key;
     var qs = E.filter(function (e) {
       if (state.session && e.user + "/" + e.session !== state.session) return false;
+      if (state.source && (e.source || "-") !== state.source) return false;
+      if (state.folder && (e.folder || "-") !== state.folder) return false;
       if (state.filter === "off") {
         if (e.terminated === "answer" && !e.compacted) return false;
       } else if (state.filter === "answer" && (e.terminated !== "answer" || e.compacted)) return false;
