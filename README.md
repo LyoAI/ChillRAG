@@ -181,6 +181,27 @@ and prints what still fails and why. Corpora
 load from the prepared cache — a batch run answers, never re-parses. Inspect a
 run with `python -m chillrag.utils.trace_view`.
 
+## Eval
+
+`python -m chillrag.eval runs/q.answers.jsonl` scores a batch answers file
+against the reference values its rows carry — add a `label` column (and
+optionally `unit`, the unit the label is expressed in) to the batch input and
+every answers row already has what the scorer needs. Two evaluators ship:
+`fin-numeric` parses a value and its unit out of free text (`92,599,365.5万元`,
+`19.3%`, `(1.5)` — unit-bearing numbers outrank bare ones from prose),
+converts within a dimension (亿元 ↔ 万元; `%` ↔ 倍; foreign currency never
+converts, an incompatible pair fails) and matches at the coarser of the two
+precisions the values claim, with round-tolerance and cross-unit relative
+fallbacks (`CHILLRAG_EVAL_ROUND_TOL` / `CHILLRAG_EVAL_MONEY_REL_TOL` /
+`CHILLRAG_EVAL_RATE_REL_TOL`). A `label` marked N/A requires abstention; a
+value answered anyway counts as fabricated. `exact` strips case, punctuation
+and spacing and requires equality — choice letters included. Rows without a
+`label` are skipped and reported, never failed; exit code is 0 whenever
+scoring ran. `--out verdicts.jsonl` exports per-row results, each joined to
+its answers row by `index`. New evaluators are subclasses of
+`chillrag.eval.Evaluator` — one method, `score_row` — registered in
+`chillrag/eval/__init__.py`, which is what turns them into CLI choices.
+
 ## Endpoints
 
 Everything except `/healthz` and login needs the `space-auth` cookie.

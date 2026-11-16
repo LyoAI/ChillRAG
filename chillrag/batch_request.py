@@ -63,6 +63,7 @@ from chillrag.corpus import CorpusManager
 from chillrag.rag_tool import RAGTool, source_id_for
 from chillrag.tracing import episode, last_trace_id, new_session_id
 from chillrag.utils import get_logger
+from chillrag.utils.answers import write_answers
 
 logger = get_logger()
 console = Console()
@@ -282,24 +283,7 @@ def _record(job: Job, outcome: Outcome) -> dict[str, Any]:
 
 
 def _write_xlsx(path: Path, jobs: list[Job], outcomes: list[Outcome]) -> None:
-    import openpyxl
-
-    records = [_record(job, outcome) for job, outcome in zip(jobs, outcomes)]
-    header: list[str] = []
-    for record in records:
-        header += [k for k in record if k not in header]
-    book = openpyxl.Workbook()
-    sheet = book.active
-    sheet.append(header)
-    for record in records:
-        sheet.append([_cell(record.get(k)) for k in header])
-    book.save(path)
-
-
-def _cell(value: Any) -> Any:
-    if isinstance(value, str) and len(value) > 32_000:  # Excel's cell limit
-        return value[:32_000] + " …"
-    return value
+    write_answers(path, [_record(job, outcome) for job, outcome in zip(jobs, outcomes)])
 
 
 # -------------------------------------------------------------------- cli --

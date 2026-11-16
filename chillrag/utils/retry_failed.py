@@ -21,35 +21,16 @@ from __future__ import annotations
 
 import argparse
 import asyncio
-import json
-import os
 from collections import Counter
 from pathlib import Path
 
 from chillrag import batch_request
+from chillrag.utils.answers import read_answers, write_answers
 
 #: Fields a retry attempt overwrites; the rest of the record is the row's own
 #: identity and rides along untouched.
 OUTPUT_FIELDS = frozenset(
     {"index", "answer", "status", "duration_s", "trace_id", "error", "attempts"})
-
-
-def _read_records(path: Path) -> list[dict]:
-    """Every answers record, in file order — jsonl lines or xlsx data rows."""
-    if path.suffix.lower() == ".xlsx":
-        import openpyxl
-
-        book = openpyxl.load_workbook(path, read_only=True, data_only=True)
-        rows = list(book.active.iter_rows(values_only=True))
-        if not rows:
-            return []
-        header = [str(cell).strip() if cell is not None else "" for cell in rows[0]]
-        return [dict(zip(header, row)) for row in rows[1:]
-                if any(cell is not None for cell in row)]
-    if path.suffix.lower() == ".jsonl":
-        return [json.loads(line)
-                for line in path.read_text(encoding="utf-8").splitlines() if line.strip()]
-    raise SystemExit(f"expected a .jsonl or .xlsx answers file, got {path.name!r}")
 
 
 def _failed(records: list[dict]) -> list[tuple[dict, dict]]:
@@ -82,28 +63,6 @@ def _patch(record: dict, outcome) -> None:
         record.pop("attempts", None)
 
 
-def _write_back(path: Path, records: list[dict]) -> None:
-    """Rewrite the answers file atomically: complete content first, one replace."""
-    tmp = path.with_name(path.name + ".tmp")
-    if path.suffix.lower() == ".xlsx":
-        import openpyxl
-
-        header: list[str] = []
-        for record in records:
-            header += [k for k in record if k not in header]
-        book = openpyxl.Workbook()
-        sheet = book.active
-        sheet.append(header)
-        for record in records:
-            sheet.append([batch_request._cell(record.get(k)) for k in header])
-        book.save(tmp)
-    else:
-        tmp.write_text(
-            "\n".join(json.dumps(r, ensure_ascii=False, default=str) for r in records) + "\n",
-            encoding="utf-8")
-    os.replace(tmp, path)
-
-
 def classify(error: str) -> str:
     """One bucket per remedy: timeouts want bigger knobs, the rest want luck."""
     if error.startswith("TimeoutError"):
@@ -134,7 +93,7 @@ def main(argv: list[str] | None = None) -> int:
                         help="per-question output contract for rows that name none")
     args = parser.parse_args(argv)
 
-    records = _read_records(args.answers)
+    records = read_answers(args.answers)
     targets = _failed(records)
     if not targets:
         print(f"nothing to retry in {args.answers}")
@@ -158,7 +117,7 @@ def main(argv: list[str] | None = None) -> int:
 
     for (record, _), outcome in zip(targets, outcomes):
         _patch(record, outcome)
-    _write_back(args.answers, records)
+    write_answers(args.answers, records)
 
     left = sum(o.status == "error" for o in outcomes)
     print(f"{len(outcomes) - left} recovered · {left} still failing → {args.answers}")
