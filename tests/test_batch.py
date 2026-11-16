@@ -29,6 +29,7 @@ class FakeTool:
         self.active = 0
         self.max_active = 0
         self.calls: list[tuple[str, tuple[int, ...]]] = []
+        self.fail_first: dict[str, int] = {}  # question -> how many calls raise first
 
     def answer_by_question(self, question, source_id_list=(), **kwargs):
         with self._lock:
@@ -39,6 +40,12 @@ class FakeTool:
             time.sleep(0.05)
             if question.startswith("boom"):
                 raise RuntimeError("the model is unhappy")
+            with self._lock:
+                flaky = self.fail_first.get(question, 0)
+            if flaky:
+                with self._lock:
+                    self.fail_first[question] = flaky - 1
+                raise ConnectionError("network hiccup")
             answer = f"ans:{question}"
         finally:
             with self._lock:
@@ -196,7 +203,39 @@ def test_concurrency_never_exceeds_the_cap(fake_tool, tmp_path):
 
 # ---------------------------------------------------------------- failure --
 
-def test_one_bad_row_does_not_sink_the_batch(fake_tool, tmp_path):
+def test_a_flaky_row_is_retried_until_it_answers(fake_tool, tmp_path, monkeypatch):
+    """A transient failure is invisible in the final output except for the
+    attempts count: the row answers, and its trace_id names the attempt that
+    worked, since a failed attempt never recorded an episode."""
+    monkeypatch.setattr(batch_request, "_RETRY_DELAYS", (0,))
+    fake_tool.fail_first = {"flaky": 1}
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "flaky"}, {"question": "q2"}])
+    out = tmp_path / "out.jsonl"
+    code = batch_request.main([str(src), "--folder", "bank", "--retries", "2",
+                               "--out", str(out)])
+    assert code == 0
+    records = _answers(out)
+    assert [r["status"] for r in records] == ["ok", "ok"]
+    assert records[0]["answer"] == "ans:flaky"
+    assert records[0]["attempts"] == 2 and "attempts" not in records[1]
+    assert records[0]["trace_id"], "the successful attempt names its trace"
+
+
+def test_exhausted_retries_end_in_the_error_row(fake_tool, tmp_path, monkeypatch):
+    monkeypatch.setattr(batch_request, "_RETRY_DELAYS", (0,))
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "boom"}])
+    out = tmp_path / "out.jsonl"
+    code = batch_request.main([str(src), "--folder", "bank", "--retries", "2",
+                               "--out", str(out)])
+    assert code == 1
+    (record,) = _answers(out)
+    assert record["status"] == "error" and record["attempts"] == 3
+    assert "RuntimeError" in record["error"]
+    assert "trace_id" not in record
+
+
+def test_one_bad_row_does_not_sink_the_batch(fake_tool, tmp_path, monkeypatch):
+    monkeypatch.setattr(batch_request, "_RETRY_DELAYS", (0,))
     src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}, {"question": "boom"},
                                         {"question": "q3"}])
     out = tmp_path / "out.jsonl"

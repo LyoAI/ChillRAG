@@ -32,7 +32,10 @@ it, never merging rows into a shared conversation.
 Questions run through ``answer_by_question`` — one ReAct episode each, many
 model calls apiece — behind a semaphore, so concurrency stays modest by
 default. Each query traces as its own session, ``batch-<session_id>``, so one
-query is one file. Results stream to ``<input>.answers.jsonl`` (or ``--out``,
+query is one file. A row that raises — a network blip, a timeout — is retried
+``--retries`` times (default 2, short backoff) before it gives up as
+``status: "error"``; a retried row reports how many attempts it took.
+Results stream to ``<input>.answers.jsonl`` (or ``--out``,
 ``.xlsx`` honored) as they complete. Each answers row carries the
 ``trace_id`` of the episode that produced it, so a result joins back to its
 transcript; a cache hit ran no episode and has no id. Corpora load from their
@@ -65,6 +68,9 @@ console = Console()
 # is passthrough context.
 CALL_FIELDS = ("instructions", "output_instruction", "lang", "mode")
 
+#: Backoff seconds before each retry of a failed row; the last entry repeats.
+_RETRY_DELAYS = (4, 8, 16)
+
 
 @dataclass
 class Job:
@@ -83,6 +89,7 @@ class Outcome:
     duration_s: float
     error: str = ""
     trace_id: str | None = None  # None when no episode ran (cache hit) or it failed
+    attempts: int = 1            # >1 when transient failures were retried away
 
 
 # ------------------------------------------------------------------ input --
@@ -204,24 +211,43 @@ async def run_batch(
     tool: RAGTool,
     *,
     concurrency: int,
+    retries: int = 0,
     on_outcome=None,
 ) -> list[Outcome]:
-    """Run jobs through a semaphore-bounded task queue, preserving input order."""
+    """Run jobs through a semaphore-bounded task queue, preserving input order.
+
+    A row that raises is retried ``retries`` times with a short backoff — the
+    queue slot is held across attempts, so retries never raise the concurrency
+    ceiling. A failed attempt wrote no trace (the agent records only finished
+    episodes), so the row's ``trace_id`` always names the attempt that worked.
+    """
     semaphore = asyncio.Semaphore(concurrency)
 
     async def one(job: Job) -> Outcome:
         async with semaphore:
             start = time.perf_counter()
-            try:
-                answer, trace_id = await asyncio.to_thread(_answer, tool, job)
-            except Exception as exc:  # one bad question must not sink the batch
-                outcome = Outcome(job.index, "error", "",
-                                  time.perf_counter() - start,
-                                  f"{type(exc).__name__}: {exc}")
-            else:
-                status = "ok" if answer.strip() else "empty"
-                outcome = Outcome(job.index, status, answer,
-                                  time.perf_counter() - start, trace_id=trace_id)
+            outcome = None
+            for attempt in range(1, retries + 2):
+                try:
+                    answer, trace_id = await asyncio.to_thread(_answer, tool, job)
+                except Exception as exc:  # one bad question must not sink the batch
+                    if attempt > retries:
+                        outcome = Outcome(job.index, "error", "",
+                                          time.perf_counter() - start,
+                                          f"{type(exc).__name__}: {exc}", attempts=attempt)
+                        break
+                    delay = _RETRY_DELAYS[min(attempt - 1, len(_RETRY_DELAYS) - 1)]
+                    logger.warning("batch row %d: %s: %s — retry %d/%d in %.0fs",
+                                   job.index + 1, type(exc).__name__, exc,
+                                   attempt, retries, delay)
+                    if delay:
+                        await asyncio.sleep(delay)
+                else:
+                    status = "ok" if answer.strip() else "empty"
+                    outcome = Outcome(job.index, status, answer,
+                                      time.perf_counter() - start, trace_id=trace_id,
+                                      attempts=attempt)
+                    break
             logger.info("batch row %d: %s (%.1fs)", job.index + 1, outcome.status,
                         outcome.duration_s)
             if on_outcome:
@@ -241,6 +267,8 @@ def _record(job: Job, outcome: Outcome) -> dict[str, Any]:
         record["trace_id"] = outcome.trace_id
     if outcome.error:
         record["error"] = outcome.error
+    if outcome.attempts > 1:
+        record["attempts"] = outcome.attempts
     return record
 
 
@@ -285,6 +313,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--output-instruction",
                         help="per-question output contract when a row has none")
     parser.add_argument("--limit", type=int, help="run only the first N rows")
+    parser.add_argument("--retries", type=int, default=2,
+                        help="retries per row on failure — network blips, timeouts (default 2)")
     args = parser.parse_args(argv)
 
     rows = _read_rows(args.input)
@@ -321,6 +351,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         tool = _load_tool({job.folder for job in jobs})
         outcomes = asyncio.run(run_batch(jobs, tool, concurrency=args.concurrency,
+                                         retries=max(0, args.retries),
                                          on_outcome=on_outcome))
     finally:
         if progress:
