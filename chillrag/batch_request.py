@@ -32,9 +32,12 @@ it, never merging rows into a shared conversation.
 Questions run through ``answer_by_question`` — one ReAct episode each, many
 model calls apiece — behind a semaphore, so concurrency stays modest by
 default. Each query traces as its own session, ``batch-<session_id>``, so one
-query is one file. A row that raises — a network blip, a timeout — is retried
+query is one file. A row that raises — a network blip — is retried
 ``--retries`` times (default 2, short backoff) before it gives up as
-``status: "error"``; a retried row reports how many attempts it took.
+``status: "error"``; a retried row reports how many attempts it took. A
+``TimeoutError`` is never retried: learning a timeout is deterministic costs
+a full ``CHILLRAG_ANSWER_TIMEOUT_S`` window per attempt, and the error already
+names the knob to raise.
 Results stream to ``<input>.answers.jsonl`` (or ``--out``,
 ``.xlsx`` honored) as they complete. Each answers row carries the
 ``trace_id`` of the episode that produced it, so a result joins back to its
@@ -218,8 +221,11 @@ async def run_batch(
 
     A row that raises is retried ``retries`` times with a short backoff — the
     queue slot is held across attempts, so retries never raise the concurrency
-    ceiling. A failed attempt wrote no trace (the agent records only finished
-    episodes), so the row's ``trace_id`` always names the attempt that worked.
+    ceiling. Timeouts are the exception: each retry would burn a full
+    ``ANSWER_TIMEOUT_S`` window just to confirm the question is still too big,
+    so they fail at once. A failed attempt wrote no trace (the agent records
+    only finished episodes), so the row's ``trace_id`` always names the
+    attempt that worked.
     """
     semaphore = asyncio.Semaphore(concurrency)
 
@@ -231,7 +237,10 @@ async def run_batch(
                 try:
                     answer, trace_id = await asyncio.to_thread(_answer, tool, job)
                 except Exception as exc:  # one bad question must not sink the batch
-                    if attempt > retries:
+                    # A timeout is not transient: a retry would burn a full
+                    # ANSWER_TIMEOUT_S window just to confirm the question is
+                    # still too big, and the message already names the knob.
+                    if attempt > retries or isinstance(exc, TimeoutError):
                         outcome = Outcome(job.index, "error", "",
                                           time.perf_counter() - start,
                                           f"{type(exc).__name__}: {exc}", attempts=attempt)

@@ -40,6 +40,9 @@ class FakeTool:
             time.sleep(0.05)
             if question.startswith("boom"):
                 raise RuntimeError("the model is unhappy")
+            if question.startswith("slow"):
+                raise TimeoutError("answering exceeded 600s "
+                                   "(raise ANSWER_TIMEOUT_S, or lower CHILLRAG_MAX_TOOL_CALLS)")
             with self._lock:
                 flaky = self.fail_first.get(question, 0)
             if flaky:
@@ -231,6 +234,22 @@ def test_exhausted_retries_end_in_the_error_row(fake_tool, tmp_path, monkeypatch
     (record,) = _answers(out)
     assert record["status"] == "error" and record["attempts"] == 3
     assert "RuntimeError" in record["error"]
+    assert "trace_id" not in record
+
+
+def test_a_timeout_is_not_retried(fake_tool, tmp_path, monkeypatch):
+    """A retry would burn a full ANSWER_TIMEOUT_S window to learn the same
+    lesson; the row fails at once and the message names the knob to raise."""
+    monkeypatch.setattr(batch_request, "_RETRY_DELAYS", (0,))
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "slow question"}])
+    out = tmp_path / "out.jsonl"
+    code = batch_request.main([str(src), "--folder", "bank", "--retries", "2",
+                               "--out", str(out)])
+    assert code == 1
+    (record,) = _answers(out)
+    assert record["status"] == "error"
+    assert "attempts" not in record, "a timeout got no second attempt"
+    assert "ANSWER_TIMEOUT_S" in record["error"]
     assert "trace_id" not in record
 
 
