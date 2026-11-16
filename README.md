@@ -195,10 +195,13 @@ precisions the values claim, with round-tolerance and cross-unit relative
 fallbacks (`CHILLRAG_EVAL_ROUND_TOL` / `CHILLRAG_EVAL_MONEY_REL_TOL` /
 `CHILLRAG_EVAL_RATE_REL_TOL`). A `label` marked N/A requires abstention; a
 value answered anyway counts as fabricated. `exact` strips case, punctuation
-and spacing and requires equality — choice letters included. Rows without a
-`label` are skipped and reported, never failed; exit code is 0 whenever
-scoring ran. `--out verdicts.jsonl` exports per-row results, each joined to
-its answers row by `index`. New evaluators are subclasses of
+and spacing and requires equality — choice letters included. Rows without a `label` are skipped and reported, never
+failed; exit code is 0 whenever scoring ran. `--out verdicts.jsonl` exports
+per-row results, each joined to its answers row by `index`; every run also
+renders a self-contained `q.answers.eval.html` report next to the answers
+file — stat tiles, the wrong answers up front, one click expands a row — and
+opens it in the browser (`--no-open` keeps it shut, `--no-report` skips it).
+New evaluators are subclasses of
 `chillrag.eval.Evaluator` — one method, `score_row` — registered in
 `chillrag/eval/__init__.py`, which is what turns them into CLI choices.
 

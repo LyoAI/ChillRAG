@@ -3,20 +3,26 @@
     python -m chillrag.eval runs/q.answers.jsonl
     python -m chillrag.eval runs/q.xlsx --evaluator exact --out verdicts.jsonl
 
-Rows without a ``label`` are skipped and reported, never failed. Exit code is
-0 whenever scoring ran; accuracy itself is the output, not a verdict.
+Each run also renders a self-contained HTML report next to the answers file
+(``q.answers.eval.html``) — stat tiles, the wrong answers up front, one click
+expands a row — and opens it in the browser (``--no-open`` keeps it shut,
+``--no-report`` skips it). Rows without a ``label`` are skipped and reported,
+never failed. Exit code is 0 whenever scoring ran; accuracy itself is the
+output, not a verdict.
 """
 
 from __future__ import annotations
 
 import argparse
 import json
+import webbrowser
 from pathlib import Path
 
 from rich.console import Console
 from rich.table import Table
 
 from chillrag.eval import EVALUATORS, evaluate
+from chillrag.eval.report import render_eval_html
 from chillrag.utils.answers import read_answers
 
 console = Console()
@@ -33,6 +39,11 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--unit-field", help="reference-unit column, numeric scorer only",
                         default="unit")
     parser.add_argument("--out", type=Path, help="also write per-row verdicts as JSONL")
+    parser.add_argument("--report", type=Path,
+                        help="HTML report path (default: alongside the answers file)")
+    parser.add_argument("--no-report", action="store_true", help="skip the HTML report")
+    parser.add_argument("--no-open", action="store_true",
+                        help="write the report, don't open a browser")
     parser.add_argument("--max-rows", type=int, default=40,
                         help="failing rows to print in full (default 40)")
     args = parser.parse_args(argv)
@@ -57,6 +68,7 @@ def main(argv: list[str] | None = None) -> int:
             by_index[position] = row
 
     stats = evaluator.aggregate(verdicts)
+    stats["name"] = evaluator.name
     summary = Table.grid(pad_edge=False)
     summary.add_column(style="dim", width=18)
     summary.add_column()
@@ -93,6 +105,24 @@ def main(argv: list[str] | None = None) -> int:
                                   "detail": v.detail, "note": v.note}, ensure_ascii=False)
                       for v in verdicts) + "\n", encoding="utf-8")
         print(f"verdicts → {args.out}")
+
+    if not args.no_report:
+        payload = {
+            "evaluator": evaluator.name,
+            "answers": str(args.answers),
+            "skipped": skipped,
+            "stats": stats,
+            "verdicts": [{"index": v.index, "ok": v.ok, "detail": v.detail, "note": v.note,
+                          "question": str(by_index.get(v.index, {}).get("question", "")),
+                          "label": str(by_index.get(v.index, {}).get(args.label_field, "")),
+                          "answer": str(by_index.get(v.index, {}).get("answer", ""))}
+                         for v in verdicts],
+        }
+        report_path = args.report or args.answers.with_name(args.answers.stem + ".eval.html")
+        report_path.write_text(render_eval_html(payload), encoding="utf-8")
+        print(f"report → {report_path}")
+        if not args.no_open:
+            webbrowser.open(f"file://{report_path.resolve()}")
     return 0
 
 
