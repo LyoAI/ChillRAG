@@ -55,14 +55,16 @@ def test_error_rows_are_reanswered_in_place(fake_tool, tmp_path):
     assert {p.name for p in tmp_path.iterdir()} == {"q.answers.jsonl", "traces"}, "no new files"
 
 
-def test_empty_rows_wait_for_the_flag(fake_tool, tmp_path):
-    path = _answers(tmp_path, [_row(0, "q1", "empty")])
+def test_empty_rows_are_retried_too(fake_tool, tmp_path):
+    """Empty counts as unanswered: the answer carries no evidence the corpus
+    lacks the fact, so the row is re-answered alongside the error rows."""
+    path = _answers(tmp_path, [_row(0, "q1", "empty"), _row(1, "q2", "error",
+                                                         error="ConnectionError: x")])
     assert retry_failed.main([str(path)]) == 0
-    assert json.loads(path.read_text(encoding="utf-8"))["status"] == "empty"
-
-    assert retry_failed.main([str(path), "--include-empty"]) == 0
-    row = json.loads(path.read_text(encoding="utf-8"))
-    assert row["status"] == "ok" and row["answer"] == "ans:q1"
+    rows = [json.loads(line) for line in path.read_text(encoding="utf-8").splitlines()]
+    assert [(r["status"], r["answer"]) for r in rows] == [
+        ("ok", "ans:q1"), ("ok", "ans:q2")]
+    assert rows[0]["trace_id"], "the re-answer names its trace"
 
 
 def test_rows_that_fail_again_stay_error(fake_tool, tmp_path):

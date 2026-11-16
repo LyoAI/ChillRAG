@@ -173,10 +173,11 @@ that produced it, so a result joins back to its full transcript (a cache hit
 ran no episode and has none). A row that raises is retried `--retries` times
 (default 2, short backoff) before it reports `status: "error"` with the
 exception; a retried row says how many `attempts` it took, and its `trace_id`
-names the attempt that worked. Failed rows go back through
+names the attempt that worked. Unanswered rows go back through
 `python -m chillrag.utils.retry_failed <answers file>`: it re-answers them in
-place — jsonl or xlsx, no new files, the answers stay one artifact in input
-order, healed rows read as first-run — and prints what still fails and why. Corpora
+place — `status: "error"` or `"empty"`, jsonl or xlsx, no new files, the
+answers stay one artifact in input order, healed rows read as first-run —
+and prints what still fails and why. Corpora
 load from the prepared cache — a batch run answers, never re-parses. Inspect a
 run with `python -m chillrag.utils.trace_view`.
 

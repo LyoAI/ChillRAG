@@ -1,15 +1,15 @@
-"""Retry the failed rows of a batch answers file, in place.
+"""Retry the unanswered rows of a batch answers file, in place.
 
 Reads ``<input>.answers.jsonl`` (or ``.xlsx``), re-answers the rows that did
-not answer — ``status: "error"``, plus ``empty`` with ``--include-empty`` —
-through the same engine as ``batch_request``, and patches the results back
-into the same file. No new artifacts: the answers stay one file in input
-order, and each patched row keeps its identity (folder, user, session) so its
-trace joins exactly as before. The rewrite is atomic — answers land first,
-then one replace — so a crash mid-run never corrupts what was there.
+not answer — ``status: "error"`` or ``"empty"`` — through the same engine as
+``batch_request``, and patches the results back into the same file. No new
+artifacts: the answers stay one file in input order, and each patched row
+keeps its identity (folder, user, session) so its trace joins exactly as
+before. The rewrite is atomic — answers land first, then one replace — so a
+crash mid-run never corrupts what was there.
 
     python -m chillrag.utils.retry_failed runs/q.answers.jsonl
-    python -m chillrag.utils.retry_failed runs/q.xlsx --include-empty -c 4
+    python -m chillrag.utils.retry_failed runs/q.xlsx -c 4
 
 Timeouts still never retry (``--retries`` covers transient network errors
 only); rows that fail again stay ``status: "error"`` and the closing
@@ -52,10 +52,13 @@ def _read_records(path: Path) -> list[dict]:
     raise SystemExit(f"expected a .jsonl or .xlsx answers file, got {path.name!r}")
 
 
-def _failed(records: list[dict], include_empty: bool) -> list[tuple[dict, dict]]:
-    """``(record, clean_input_row)`` for the unanswered rows, input order."""
-    bad = [r for r in records
-           if r.get("status") == "error" or (include_empty and r.get("status") == "empty")]
+def _failed(records: list[dict]) -> list[tuple[dict, dict]]:
+    """``(record, clean_input_row)`` for the unanswered rows, input order.
+
+    Empty counts as unanswered: an empty answer is not evidence the corpus
+    lacks the fact — the agent may have been forced off its search early.
+    """
+    bad = [r for r in records if r.get("status") in ("error", "empty")]
     bad.sort(key=lambda r: r.get("index", 0))
     return [(r, {k: v for k, v in r.items() if k not in OUTPUT_FIELDS}) for r in bad]
 
@@ -119,8 +122,6 @@ def main(argv: list[str] | None = None) -> int:
                         help="parallel episodes (default 2)")
     parser.add_argument("--retries", type=int, default=2,
                         help="retries per row on failure — network blips only (default 2)")
-    parser.add_argument("--include-empty", action="store_true",
-                        help="also re-answer rows whose answer came back empty")
     parser.add_argument("--question-field", default="question")
     parser.add_argument("--folder", help="corpus for rows that name none")
     parser.add_argument("--user", help="identity for rows that name none")
@@ -134,7 +135,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     records = _read_records(args.answers)
-    targets = _failed(records, include_empty=args.include_empty)
+    targets = _failed(records)
     if not targets:
         print(f"nothing to retry in {args.answers}")
         return 0
