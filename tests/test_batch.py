@@ -28,11 +28,13 @@ class FakeTool:
         self._lock = threading.Lock()
         self.active = 0
         self.max_active = 0
+        self.calls: list[tuple[str, tuple[int, ...]]] = []
 
     def answer_by_question(self, question, source_id_list=(), **kwargs):
         with self._lock:
             self.active += 1
             self.max_active = max(self.max_active, self.active)
+            self.calls.append((question, tuple(source_id_list)))
         try:
             time.sleep(0.05)
             if question.startswith("boom"):
@@ -142,6 +144,36 @@ def test_row_identity_overrides_the_run_defaults(fake_tool, tmp_path):
     assert users == {"alice", "batch"}
     assert (tmp_path / "traces" / "alice" / "s-a.jsonl").exists()
     assert (tmp_path / "traces" / "batch" / "s-b.jsonl").exists()
+
+
+def test_each_row_retrieves_from_its_own_folder(fake_tool, tmp_path):
+    """The handle carries every corpus in the batch, so a row's folder must be
+    named per call — an unnamed request lands on whichever corpus was attached
+    last, and a mixed-folder batch would silently answer from one company."""
+    from chillrag.rag_tool import source_id_for
+
+    src = _jsonl(tmp_path / "q.jsonl", [
+        {"question": "q1", "folder": "byd"},
+        {"question": "q2", "folder": "cqb"},
+        {"question": "q3"},
+    ])
+    out = tmp_path / "out.jsonl"
+    code = batch_request.main([str(src), "--folder", "byd", "--out", str(out)])
+    assert code == 0
+    scope = {q: ids for q, ids in fake_tool.calls}
+    assert scope["q1"] == (source_id_for("byd"),)
+    assert scope["q2"] == (source_id_for("cqb"),)
+    assert scope["q3"] == (source_id_for("byd"),), "a row falls back to --folder"
+
+
+def test_user_and_source_flags_fill_unnamed_rows(fake_tool, tmp_path):
+    src = _jsonl(tmp_path / "q.jsonl", [{"question": "q1"}])
+    batch_request.main([str(src), "--folder", "bank", "--user", "kainan",
+                        "--source", "eval", "--out", str(tmp_path / "out.jsonl")])
+
+    (path,) = (tmp_path / "traces" / "kainan").glob("*.jsonl")
+    record = json.loads(path.read_text(encoding="utf-8"))
+    assert record["user"] == "kainan" and record["source"] == "eval"
 
 
 def test_bare_jsonl_strings_are_questions(fake_tool, tmp_path):

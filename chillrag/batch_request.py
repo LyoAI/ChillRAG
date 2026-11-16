@@ -54,7 +54,7 @@ from rich.progress import BarColumn, Progress, SpinnerColumn, TextColumn, TimeEl
 from rich.table import Table
 
 from chillrag.corpus import CorpusManager
-from chillrag.rag_tool import RAGTool
+from chillrag.rag_tool import RAGTool, source_id_for
 from chillrag.tracing import episode, last_trace_id, new_session_id
 from chillrag.utils import get_logger
 
@@ -148,14 +148,14 @@ def _plan(rows: list[dict], args: argparse.Namespace) -> list[Job]:
             if key in (args.question_field, "folder") or value is None:
                 continue
             context[key] = value if isinstance(value, (str, int, float, bool)) else str(value)
-        context.setdefault("user", "batch")
+        context.setdefault("user", args.user or "batch")
         context["user"] = str(context["user"])
         # One session per query: a batch is a set of independent single-turn
         # questions, so each episode's trace is its own file — a session is a
         # conversation, and no two rows share one.
         context.setdefault("session_id", f"batch-{new_session_id()}")
         context["session_id"] = str(context["session_id"])
-        context.setdefault("source", "batch")
+        context.setdefault("source", args.source or "batch")
         context["folder"] = str(folder)
         context.update(call_kwargs)
         jobs.append(Job(index, question, str(folder), context, call_kwargs))
@@ -186,11 +186,16 @@ def _load_tool(folders: set[str]) -> RAGTool:
 def _answer(tool: RAGTool, job: Job) -> tuple[str, str | None]:
     """The thread body: bind the row's identity, then one agent episode.
 
+    The handle carries every corpus the batch needs, so the row's folder must
+    be named per call — an empty ``source_id_list`` would mean "this handle's
+    own corpus", which is whichever one was attached last, not this row's.
+
     Returns the answer and the id of the trace that episode wrote, so the
     answers row can be joined back to its transcript.
     """
     with episode(**job.context):
-        answer = tool.answer_by_question(job.question, **job.call_kwargs)
+        answer = tool.answer_by_question(
+            job.question, source_id_list=[source_id_for(job.folder)], **job.call_kwargs)
         return answer, last_trace_id()
 
 
