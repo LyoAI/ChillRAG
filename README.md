@@ -185,7 +185,8 @@ run with `python -m chillrag.utils.trace_view`.
 
 `python -m chillrag.eval runs/q.answers.jsonl` scores a batch answers file
 against the reference values its rows carry — add a `label` column (and
-optionally `unit`, the unit the label is expressed in) to the batch input and
+optionally `unit`, which gives a bare-number label its dimension; a unit
+written inside the label always wins) to the batch input and
 every answers row already has what the scorer needs. Two evaluators ship:
 `fin-numeric` parses a value and its unit out of free text (`92,599,365.5万元`,
 `19.3%`, `(1.5)` — unit-bearing numbers outrank bare ones from prose),

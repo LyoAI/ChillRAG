@@ -17,7 +17,8 @@ thousand/million/billion, compound units multiply, a bare currency is base 1,
 foreign currency is a different dimension and never converts); rates against
 a pure ratio (``%`` is ×0.01, ``倍`` is ×1). An answer without a unit word
 implies the reference's unit and is never converted; incompatible dimensions
-(``万元`` vs ``%``) fail outright.
+(``万元`` vs ``%``) fail outright. The ``unit`` column exists for labels
+written as bare numbers — a unit written inside the label always wins.
 
 A reference marked N/A requires abstention: no value in the answer, or the
 row counts as fabricated. Unit-bearing numbers in an answer outrank bare
@@ -198,9 +199,10 @@ class FinNumeric(Evaluator):
         if reference is None:
             return Verdict(0, False, 0.0, "label-not-numeric",
                            f"label {label[:40]!r} parses to no value")
-        ref_value, ref_unit_text, ref_literal = reference
-
-        ref_unit = str(row.get(self.unit_field) or "").strip() or ref_unit_text
+        ref_value, ref_unit, ref_literal = reference
+        # The label's own unit wins; the unit column only gives a bare-number
+        # label ("19.3" + unit "%") its dimension, never overwrites one.
+        ref_unit = ref_unit or str(row.get(self.unit_field) or "").strip()
         ok, detail, note = _compare(
             ref_value, ref_unit, _meaningful_precision(ref_literal),
             value, unit, _meaningful_precision(literal))

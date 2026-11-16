@@ -54,6 +54,15 @@ def test_percent_matches_its_own_text_and_multiples_convert():
     assert v.ok and v.detail == "exact", "1.25倍 converts to 125% in the rate dimension"
 
 
+def test_the_unit_column_gives_a_bare_label_its_dimension():
+    assert _score("19.3%", "19.3", unit="%").ok
+
+
+def test_a_unit_written_in_the_label_beats_the_column():
+    v = _score("902,561万元人民币", "90.3亿元", unit="万元")
+    assert v.ok, "the label says 亿元; the column never rewrites it — 90.2561亿 fits ±0.1亿"
+
+
 def test_a_rounding_fallback_covers_the_last_digit():
     assert _score("35142.1万元", "35142.05万元").detail == "round-tol"
 

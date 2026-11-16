@@ -76,7 +76,7 @@ def main(argv: list[str] | None = None) -> int:
     summary.add_row("scored", f"{stats['scored']} · skipped {skipped} (no {args.label_field!r})")
     summary.add_row("accuracy", f"{stats['accuracy']:.1%} ({stats['correct']}/{stats['scored']})")
     for key, value in stats.items():
-        if key not in ("scored", "accuracy", "correct", "details"):
+        if key not in ("scored", "accuracy", "correct", "details", "name"):
             summary.add_row(key, f"{value:.1%}" if isinstance(value, float) else str(value))
     summary.add_row("details", " · ".join(f"{k} {n}" for k, n in stats["details"].items()))
     console.print(summary)
