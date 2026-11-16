@@ -37,7 +37,7 @@ def test_identical_values_match_exactly():
 
 def test_the_coarser_of_the_two_precisions_decides():
     # 3.51亿 claims ±0.005亿 = ±50万, so it agrees with a 35142万 reference.
-    assert _score("3.51亿元", "35142万元").ok
+    assert _score("3.51亿元", "35142万元").detail == "exact"
     # And 11.0 writes zero claimed decimals, like any serialized integer.
     assert _score("11.0", "11").ok
     assert _score("11.44", "11.4").ok, "11.44 quantizes to the reference's 0.1 step"
@@ -60,7 +60,8 @@ def test_the_unit_column_gives_a_bare_label_its_dimension():
 
 def test_a_unit_written_in_the_label_beats_the_column():
     v = _score("902,561万元人民币", "90.3亿元", unit="万元")
-    assert v.ok, "the label says 亿元; the column never rewrites it — 90.2561亿 fits ±0.1亿"
+    assert v.ok and v.detail == "exact", \
+        "the label says 亿元; the column never rewrites it — 90.2561亿 fits ±0.1亿"
 
 
 def test_a_rounding_fallback_covers_the_last_digit():

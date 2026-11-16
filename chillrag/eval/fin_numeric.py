@@ -155,12 +155,17 @@ def _compare(ref_value: float, ref_unit: str, ref_precision: int,
         factor = Decimal(str(ans_scale)) / Decimal(str(ref_scale))
         note = f"{unit} → {ref_unit}: {value:,.6g} vs {ref_value:,.6g}"
     try:
-        ref_step = Decimal(1).scaleb(-ref_precision)
-        value_step = Decimal(1).scaleb(-precision) * factor
-        coarse = max(ref_step, value_step)
+        # Steps are powers of ten, so the coarser of the two claimed precisions
+        # is an exponent comparison — multiplying Decimals here would drag the
+        # factor's fractional exponent in and silently quantize too fine.
+        from math import log10
+
+        factor_exp = round(log10(factor))
+        coarse = Decimal(1).scaleb(max(-ref_precision, -precision + factor_exp))
         if (Decimal(str(value)).quantize(coarse, rounding=ROUND_HALF_EVEN)
                 == Decimal(str(ref_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)):
             return True, "exact", note
+        ref_step = Decimal(1).scaleb(-ref_precision)
         if (abs(Decimal(str(value)).quantize(ref_step, rounding=ROUND_HALF_EVEN)
                 - Decimal(str(ref_value))) <= Decimal(str(EVAL_ROUND_TOL))):
             return True, "round-tol", note
