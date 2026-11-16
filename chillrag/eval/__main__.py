@@ -34,6 +34,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("answers", type=Path, help="the answers file from a batch run")
     parser.add_argument("--evaluator", choices=sorted(EVALUATORS), default="fin-numeric",
                         help="which scorer to apply (default: fin-numeric)")
+    parser.add_argument("--answer-field", help="the model's answer column (default: %(default)s)",
+                        default="answer")
     parser.add_argument("--label-field", help="reference column (default: %(default)s)",
                         default="label")
     parser.add_argument("--unit-field", help="reference-unit column, numeric scorer only",
@@ -49,6 +51,7 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
 
     evaluator = EVALUATORS[args.evaluator]()
+    evaluator.answer_field = args.answer_field
     evaluator.label_field = args.label_field
     if hasattr(evaluator, "unit_field"):
         evaluator.unit_field = args.unit_field
@@ -95,8 +98,8 @@ def main(argv: list[str] | None = None) -> int:
         for v in misses[: args.max_rows]:
             row = by_index.get(v.index, {})
             table.add_row(str(v.index), v.detail, str(row.get("question", "")),
-                          str(row.get(args.label_field, "")), str(row.get("answer", "")),
-                          v.note)
+                          str(row.get(args.label_field, "")),
+                          str(row.get(args.answer_field, "")), v.note)
         console.print(table)
 
     if args.out:
@@ -115,7 +118,7 @@ def main(argv: list[str] | None = None) -> int:
             "verdicts": [{"index": v.index, "ok": v.ok, "detail": v.detail, "note": v.note,
                           "question": str(by_index.get(v.index, {}).get("question", "")),
                           "label": str(by_index.get(v.index, {}).get(args.label_field, "")),
-                          "answer": str(by_index.get(v.index, {}).get("answer", ""))}
+                          "answer": str(by_index.get(v.index, {}).get(args.answer_field, ""))}
                          for v in verdicts],
         }
         report_path = args.report or args.answers.with_name(args.answers.stem + ".eval.html")

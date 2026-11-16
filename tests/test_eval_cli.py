@@ -49,6 +49,17 @@ def test_the_exact_evaluator_is_a_cli_choice(tmp_path):
     assert main([str(path), "--evaluator", "exact"]) == 0
 
 
+def test_answer_and_label_fields_can_be_renamed(tmp_path):
+    path = _answers(tmp_path, [
+        {"index": 0, "question": "q", "output": "3.51亿元", "answer_key": "35142万元"},
+    ])
+    out = tmp_path / "v.jsonl"
+    assert main([str(path), "--answer-field", "output", "--label-field", "answer_key",
+                 "--out", str(out), "--no-report", "--no-open"]) == 0
+    verdicts = [json.loads(line) for line in out.read_text(encoding="utf-8").splitlines()]
+    assert verdicts[0]["ok"] and verdicts[0]["detail"] == "exact"
+
+
 def test_the_report_lands_next_to_the_answers_and_opens(tmp_path, no_browser):
     path = _answers(tmp_path, [
         {"index": 0, "question": "资产总额", "answer": "92,599,365.5万元", "label": "92599365.5万元"},

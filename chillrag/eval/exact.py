@@ -27,7 +27,7 @@ class Exact(Evaluator):
     name: ClassVar[str] = "exact"
 
     def score_row(self, row: dict) -> Verdict:
-        answer = str(row.get("answer") or "")
+        answer = str(row.get(self.answer_field) or "")
         label = str(row.get(self.label_field) or "")
         if abstains(label):
             ok = abstains(answer)

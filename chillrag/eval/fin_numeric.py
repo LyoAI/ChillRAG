@@ -180,7 +180,7 @@ class FinNumeric(Evaluator):
     unit_field: ClassVar[str] = "unit"
 
     def score_row(self, row: dict) -> Verdict:
-        answer = str(row.get("answer") or "")
+        answer = str(row.get(self.answer_field) or "")
         label = str(row.get(self.label_field) or "")
 
         if abstains(label):

@@ -50,7 +50,8 @@ class Evaluator(ABC):
 
     #: Registry / CLI name.
     name: ClassVar[str]
-    #: Answers-file column holding the reference answer.
+    #: Answers-file columns: the model's answer, and the reference it must match.
+    answer_field: ClassVar[str] = "answer"
     label_field: ClassVar[str] = "label"
 
     @abstractmethod
