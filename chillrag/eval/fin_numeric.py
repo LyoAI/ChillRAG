@@ -7,10 +7,11 @@ answer are both parsed as a value with a unit word (``92,599,365.5万元``,
 1. **Coarser precision**: both values quantize to the coarser of the two
    precisions they claim (``3.51亿元`` claims ±0.005亿 = ±50万, so it matches
    a ``35142万元`` reference) — Decimal arithmetic, half-even.
-2. **Round tolerance**: the answer rounded to the reference's precision within
-   ``EVAL_ROUND_TOL``.
-3. **Relative bound**, cross-unit only: money 1% / rate 5% — a materially
-   different value never slips through.
+2. **Round tolerance**: the answer rounded to the reference's precision
+   within ``ROUND_TOL`` of it (in the reference's writing unit) and
+   within 1% of it in relative terms.
+3. **Relative bound**, dimensional pairs only: money 1% / rate 1% — a
+   materially different value never slips through.
 
 Units carry a dimension: money scales against 元 (十/百/千/万/亿/兆 and
 thousand/million/billion, compound units multiply, a bare currency is base 1,
@@ -34,17 +35,27 @@ ones, so years and ids mentioned in prose don't capture the value.
 
 from __future__ import annotations
 
+import os
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
 from math import log10
 from typing import ClassVar
 
-from chillrag.config import EVAL_MONEY_REL_TOL, EVAL_RATE_REL_TOL, EVAL_ROUND_TOL
 from chillrag.eval.base import Evaluator, Verdict, abstains
 from chillrag.eval.page import bars_card, donut_card, kpis, outcome_bucket, page, stat_strip
 
 # A number, including thousand-grouped ones ("92,599,365.5" is one number,
 # not three); the grouped alternative must come first or finditer splits it.
+# Match slack. The primary rule quantizes both sides to the coarser of the
+# two precisions they claim; these bounds are the fallbacks and stay tight,
+# so a materially different value never slips through. ROUND_TOL is the
+# absolute slop for unit-less pairs and — for rates — in percentage points;
+# money pairs have no absolute slop, only the relative bounds (0.1元 is
+# nothing on a 3.5亿 figure and huge on a 0.05元 one). Env-overridable.
+ROUND_TOL = float(os.getenv("CHILLRAG_ROUND_TOL", "0.1"))
+MONEY_REL_TOL = float(os.getenv("CHILLRAG_MONEY_REL_TOL", "0.01"))
+RATE_REL_TOL = float(os.getenv("CHILLRAG_RATE_REL_TOL", "0.01"))
+
 _NUM_RE = re.compile(
     r"-?\d{1,3}(?:[,，]\d{3})+(?:\.\d+)?|-?\d+(?:\.\d+)?(?:[eE][+-]?\d+)?")
 # Chars a unit word may be built from, once the number itself has ended.
@@ -138,10 +149,20 @@ def _rate_scale(unit: str) -> float | None:
     return None
 
 
+#: The round-tolerance also caps relatively — 0.1 of a unit means nothing on
+#: a hyper-precise ratio gold, where 0.1 = ten percentage points.
+_ROUND_TOL_REL_CAP = 0.01
+
+
 def _close(ref: tuple, ans: tuple, dimension: str) -> tuple[bool, str]:
-    """One reading pair, at three widening steps: quantize both to the coarser
-    of their precisions-in-base, then the reference's round tolerance (in its
-    own writing's scale), then — dimensional pairs only — the relative bound.
+    """One reading pair: quantize the answer to the
+    reference's precision — equal values at that granularity match exactly
+    (the coarser of the two claimed precisions bounds this) — then the
+    round-tolerance: the answer rounded to the reference's precision within
+    ``ROUND_TOL`` of the reference, in the reference's writing unit, and
+    never more than 1% apart in relative terms (on a 14-dp ratio gold, 0.1 of
+    the ratio unit is ten percentage points — that is a different value, not
+    rounding). The relative bound closes what remains, dimensional pairs only.
     """
     try:
         ref_value, ref_dp, ref_tol = ref
@@ -150,13 +171,12 @@ def _close(ref: tuple, ans: tuple, dimension: str) -> tuple[bool, str]:
         if (Decimal(str(ref_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)
                 == Decimal(str(ans_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)):
             return True, "exact"
-        ref_step = Decimal(1).scaleb(-ref_dp)
-        if abs(Decimal(str(ans_value)).quantize(ref_step, rounding=ROUND_HALF_EVEN)
-               - Decimal(str(ref_value))) <= Decimal(str(ref_tol)):
+        diff = abs(Decimal(str(ans_value)) - Decimal(str(ref_value)))
+        if (diff <= Decimal(str(ref_tol))
+                and diff <= Decimal(str(_ROUND_TOL_REL_CAP)) * abs(Decimal(str(ref_value)))):
             return True, "round-tol"
-        rel = {"rate": EVAL_RATE_REL_TOL, "money": EVAL_MONEY_REL_TOL}.get(dimension)
-        if rel is not None and (abs(Decimal(str(ans_value)) - Decimal(str(ref_value)))
-                                <= Decimal(str(rel)) * abs(Decimal(str(ref_value)))):
+        rel = {"rate": RATE_REL_TOL, "money": MONEY_REL_TOL}.get(dimension)
+        if rel is not None and diff <= Decimal(str(rel)) * abs(Decimal(str(ref_value))):
             return True, f"rel-{dimension}"
         return False, "mismatch"
     except InvalidOperation:
@@ -167,14 +187,15 @@ def _readings(value: float, unit: str, precision: int,
               dimension: str) -> list[tuple[float, int, float]] | None:
     """How one side reads in the dimension's base: ``(value, dp, round_tol)``.
 
-    A unitful side has exactly one reading — its value scaled into base, with
-    its precision carried over (``35142万元`` reads as 351,420,000 元 with the
-    slop of 0.1万元). A bare side reads literally, and — rates only — a second
-    time as a percent number (``12.11`` also reads as ``12.11%``), since
-    datasets write rates both ways. ``None`` = this unit has no reading in
-    this dimension (foreign currency in the money dimension).
+    A unitful side has exactly one reading — its value scaled into base, its
+    precision carried over, its round-tolerance carried over too (0.1 of the
+    writing unit; ``35142万元`` reads as 351,420,000 元 with 0.1万元 of slop).
+    A bare side reads literally, and — rates only — a second time as a
+    percent number (``12.11`` also reads as ``12.11%``), since datasets write
+    rates both ways. ``None`` = this unit has no reading in this dimension
+    (foreign currency in the money dimension).
     """
-    tol = EVAL_ROUND_TOL  # the slop is 0.1 in each reading's own writing space
+    tol = ROUND_TOL  # 0.1 in the reading's own writing space
     if not unit:
         out = [(value, precision, tol)]
         if dimension == "rate":
@@ -218,17 +239,14 @@ def _compare(ref_value: float, ref_unit: str, ref_precision: int,
         return False, "unit-mismatch", "the unit converts to no bare reference", ""
 
     ref_readings = _readings(ref_value, ref_unit, ref_precision, dimension) \
-        if dimension else [(ref_value, ref_precision, EVAL_ROUND_TOL * 10.0 ** (-ref_precision))]
+        if dimension else [(ref_value, ref_precision, ROUND_TOL)]
     ans_readings = _readings(value, unit, precision, dimension) \
-        if dimension else [(value, precision, 0.0)]
-    # The relative bound is a cross-conversion fallback: identical units mean
-    # no conversion happened, and 1% slop must not excuse a wrong digit run.
-    allow_rel = bool(dimension) and (not unit or not ref_unit or unit != ref_unit)
+        if dimension else [(value, precision, ROUND_TOL)]
 
     notes: list[str] = []
     for r in ref_readings:
         for a in ans_readings:
-            ok, detail = _close(r, a, dimension if allow_rel else "")
+            ok, detail = _close(r, a, dimension)
             if ok:
                 note = (f"base ({dimension}): {r[0]:,.6g} vs {a[0]:,.6g}"
                         if dimension and (unit or ref_unit) else "")

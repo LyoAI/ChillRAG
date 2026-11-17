@@ -94,14 +94,6 @@ MAX_TOOL_CALLS: int | None = int(_max_tool_calls) if _max_tool_calls.strip() els
 # caller's thread-pool worker forever.
 ANSWER_TIMEOUT_S = float(os.getenv("CHILLRAG_ANSWER_TIMEOUT_S", "600"))
 
-# ---- Eval ----------------------------------------------------------------
-# Numeric-match slack for the value evaluators (chillrag.eval). The primary
-# rule matches at the coarser of the two precisions; these bounds are the
-# fallbacks, so a materially different value never slips through.
-EVAL_ROUND_TOL = float(os.getenv("CHILLRAG_EVAL_ROUND_TOL", "0.1"))
-EVAL_MONEY_REL_TOL = float(os.getenv("CHILLRAG_EVAL_MONEY_REL_TOL", "0.01"))
-EVAL_RATE_REL_TOL = float(os.getenv("CHILLRAG_EVAL_RATE_REL_TOL", "0.05"))
-
 # ---- Retrieval -----------------------------------------------------------
 # Which retrieval backends the *agent* may pick from when answering:
 # "grep" | "bm25" | "faiss" | "hybrid". "hybrid" binds all three as separate

@@ -93,7 +93,7 @@ def test_the_report_carries_the_evaluators_own_marks(tmp_path):
     path = _answers(tmp_path, [
         {"index": 0, "question": "q1", "answer": "3.51亿元", "label": "35142万元"},
         {"index": 1, "question": "q2", "answer": "35142.1万元", "label": "35142.05万元"},
-        {"index": 2, "question": "q3", "answer": "35100万元", "label": "35142万元"},
+        {"index": 2, "question": "q3", "answer": "3亿元", "label": "35142万元"},
     ])
     report = tmp_path / "q.answers.eval.html"
     assert main([str(path), "--no-open"]) == 0

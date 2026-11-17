@@ -65,6 +65,8 @@ def test_a_unit_written_in_the_label_beats_the_column():
 
 
 def test_a_rounding_fallback_covers_the_last_digit():
+    """0.05万 on a 2-dp gold is rounding; the answer quantized to the gold's
+    precision sits within 0.1万 of it."""
     assert _score("35142.1万元", "35142.05万元").detail == "round-tol"
 
 
@@ -94,6 +96,9 @@ def test_a_bare_percent_number_reference_matches_too():
 
 def test_genuinely_wrong_percent_answers_still_fail():
     assert not _score("14%", "14.87").ok, "14% vs 14.87 is a wrong answer, not a unit gap"
+    assert not _score("121.39%", "1.19824113083419").ok, \
+        "1.57pp on a ~120% ratio is a different value, not rounding"
+    assert not _score("10.52%", "9.97").ok, "5.5pp is outside both readings"
     assert not _score("10.52%", "9.97").ok, "5.5% off is outside both readings"
     assert not _score("-1.20%", "-2.03").ok
 
