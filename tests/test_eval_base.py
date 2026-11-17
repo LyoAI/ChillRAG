@@ -11,6 +11,9 @@ class _Always(Evaluator):
     def score_row(self, row: dict) -> Verdict:
         return Verdict(0, True, 1.0, "exact")
 
+    def render_report(self, verdicts, rows, *, answers, skipped):
+        return "<html></html>"
+
 
 def test_the_framework_itself_cannot_score():
     with pytest.raises(TypeError):

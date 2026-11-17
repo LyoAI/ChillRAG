@@ -3,12 +3,11 @@
     python -m chillrag.eval runs/q.answers.jsonl
     python -m chillrag.eval runs/q.xlsx --evaluator exact --out verdicts.jsonl
 
-Each run also renders a self-contained HTML report next to the answers file
-(``q.answers.eval.html``) — stat tiles, the wrong answers up front, one click
-expands a row — and opens it in the browser (``--no-open`` keeps it shut,
-``--no-report`` skips it). Rows without a ``label`` are skipped and reported,
-never failed. Exit code is 0 whenever scoring ran; accuracy itself is the
-output, not a verdict.
+Each run also renders the evaluator's own HTML page next to the answers file
+(``q.answers.eval.html``) — the scorer decides what its page shows — and
+opens it in the browser (``--no-open`` keeps it shut, ``--no-report`` skips
+it). Rows without a ``label`` are skipped and reported, never failed. Exit
+code is 0 whenever scoring ran; accuracy itself is the output, not a verdict.
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from rich.console import Console
 from rich.table import Table
 
 from chillrag.eval import EVALUATORS, evaluate
-from chillrag.eval.report import render_eval_html
 from chillrag.utils.answers import read_answers
 
 console = Console()
@@ -110,19 +108,10 @@ def main(argv: list[str] | None = None) -> int:
         print(f"verdicts → {args.out}")
 
     if not args.no_report:
-        payload = {
-            "evaluator": evaluator.name,
-            "answers": str(args.answers),
-            "skipped": skipped,
-            "stats": stats,
-            "verdicts": [{"index": v.index, "ok": v.ok, "detail": v.detail, "note": v.note,
-                          "question": str(by_index.get(v.index, {}).get("question", "")),
-                          "label": str(by_index.get(v.index, {}).get(args.label_field, "")),
-                          "answer": str(by_index.get(v.index, {}).get(args.answer_field, ""))}
-                         for v in verdicts],
-        }
+        html = evaluator.render_report(verdicts, by_index,
+                                       answers=str(args.answers), skipped=skipped)
         report_path = args.report or args.answers.with_name(args.answers.stem + ".eval.html")
-        report_path.write_text(render_eval_html(payload), encoding="utf-8")
+        report_path.write_text(html, encoding="utf-8")
         print(f"report → {report_path}")
         if not args.no_open:
             webbrowser.open(f"file://{report_path.resolve()}")

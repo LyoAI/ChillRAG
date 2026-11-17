@@ -33,6 +33,7 @@ from typing import ClassVar
 
 from chillrag.config import EVAL_MONEY_REL_TOL, EVAL_RATE_REL_TOL, EVAL_ROUND_TOL
 from chillrag.eval.base import Evaluator, Verdict, abstains
+from chillrag.eval.page import bars_card, donut_card, kpis, outcome_bucket, page, stat_strip
 
 # A number, including thousand-grouped ones ("92,599,365.5" is one number,
 # not three); the grouped alternative must come first or finditer splits it.
@@ -130,8 +131,8 @@ def _rate_scale(unit: str) -> float | None:
 
 
 def _compare(ref_value: float, ref_unit: str, ref_precision: int,
-             value: float, unit: str, precision: int) -> tuple[bool, str, str]:
-    """Match two values under their units; ``(ok, detail, note)``.
+             value: float, unit: str, precision: int) -> tuple[bool, str, str, str]:
+    """Match two values under their units; ``(ok, detail, note, dimension)``.
 
     Units convert first — money dimension into money, rate into rate, an
     incompatible pair fails. The converted value then quantizes to the
@@ -149,7 +150,7 @@ def _compare(ref_value: float, ref_unit: str, ref_precision: int,
         else:
             ref_scale, ans_scale = _rate_scale(ref_unit), _rate_scale(unit)
             if ref_scale is None or ans_scale is None:
-                return False, "unit-mismatch", f"{unit!r} and {ref_unit!r} are different dimensions"
+                return False, "unit-mismatch", f"{unit!r} and {ref_unit!r} are different dimensions", ""
             dimension = "rate"
         value = value * ans_scale / ref_scale
         factor = Decimal(str(ans_scale)) / Decimal(str(ref_scale))
@@ -164,18 +165,18 @@ def _compare(ref_value: float, ref_unit: str, ref_precision: int,
         coarse = Decimal(1).scaleb(max(-ref_precision, -precision + factor_exp))
         if (Decimal(str(value)).quantize(coarse, rounding=ROUND_HALF_EVEN)
                 == Decimal(str(ref_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)):
-            return True, "exact", note
+            return True, "exact", note, dimension
         ref_step = Decimal(1).scaleb(-ref_precision)
         if (abs(Decimal(str(value)).quantize(ref_step, rounding=ROUND_HALF_EVEN)
                 - Decimal(str(ref_value))) <= Decimal(str(EVAL_ROUND_TOL))):
-            return True, "round-tol", note
+            return True, "round-tol", note, dimension
         rel = {"rate": EVAL_RATE_REL_TOL, "money": EVAL_MONEY_REL_TOL}.get(dimension)
         if rel is not None and (abs(Decimal(str(value)) - Decimal(str(ref_value)))
                                 <= Decimal(str(rel)) * abs(Decimal(str(ref_value)))):
-            return True, f"rel-{dimension}", note
-        return False, "mismatch", note
+            return True, f"rel-{dimension}", note, dimension
+        return False, "mismatch", note, dimension
     except InvalidOperation:
-        return False, "overflow", note
+        return False, "overflow", note, dimension
 
 
 class FinNumeric(Evaluator):
@@ -192,7 +193,8 @@ class FinNumeric(Evaluator):
             ok = abstains(answer)
             return Verdict(0, ok, 1.0 if ok else 0.0,
                            "abstain-correct" if ok else "hallucinated",
-                           "" if ok else "reference is N/A; the answer names a value anyway")
+                           "" if ok else "reference is N/A; the answer names a value anyway",
+                           {"reference-na": True})
         if abstains(answer):
             return Verdict(0, False, 0.0, "no-value", "the answer names no value")
 
@@ -208,11 +210,17 @@ class FinNumeric(Evaluator):
         # The label's own unit wins; the unit column only gives a bare-number
         # label ("19.3" + unit "%") its dimension, never overwrites one.
         ref_unit = ref_unit or str(row.get(self.unit_field) or "").strip()
-        ok, detail, note = _compare(
-            ref_value, ref_unit, _meaningful_precision(ref_literal),
-            value, unit, _meaningful_precision(literal))
+        ref_precision = _meaningful_precision(ref_literal)
+        precision = _meaningful_precision(literal)
+        ok, detail, note, dimension = _compare(
+            ref_value, ref_unit, ref_precision, value, unit, precision)
+        data = {"ref_value": f"{ref_value:,.6g}", "ref_unit": ref_unit,
+                "value": f"{value:,.6g}", "unit": unit,
+                "ref_precision": ref_precision, "precision": precision,
+                "dimension": dimension}
         return Verdict(0, ok, 1.0 if ok else 0.0, detail,
-                       note or ("" if ok else f"{value:,.6g}{unit} vs {ref_value:,.6g}{ref_unit}"))
+                       note or ("" if ok else f"{value:,.6g}{unit} vs {ref_value:,.6g}{ref_unit}"),
+                       data)
 
     def aggregate(self, verdicts: list) -> dict:
         """Base accuracy plus the abstention view and the fallback histogram."""
@@ -225,3 +233,134 @@ class FinNumeric(Evaluator):
         stats["abstained"] = sum(v.detail == "no-value" for v in verdicts)
         stats["hallucinated"] = sum(v.detail == "hallucinated" for v in verdicts)
         return stats
+
+    # ------------------------------------------------------------- report --
+
+    def render_report(self, verdicts: list, rows: dict[int, dict],
+                      *, answers: str, skipped: int) -> str:
+        """The numeric page: every question marked right or wrong, the
+        reference against the answered value with its unit and the rule that
+        decided."""
+        stats = self.aggregate(verdicts)
+        acc = stats["accuracy"]
+        tone = "ok" if acc >= 0.8 else ("mid" if acc >= 0.5 else "bad")
+        kpi_items = [("Accuracy", f"{acc:.1%}",
+                      f"{stats['correct']} of {stats['scored']} rows", tone)]
+        if "accuracy-excl-na" in stats:
+            kpi_items.append(("Accuracy excl. N/A", f"{stats['accuracy-excl-na']:.1%}",
+                              f"{stats['reference-na']} N/A reference(s) excluded", ""))
+        abstained, fabricated = stats.get("abstained", 0), stats.get("hallucinated", 0)
+        kpi_items.append(("Abstained", str(abstained),
+                          "no value against a real reference", "mid" if abstained else ""))
+        kpi_items.append(("Fabricated", str(fabricated),
+                          "a value against an N/A reference", "bad" if fabricated else ""))
+
+        buckets: dict[str, int] = {}
+        for v in verdicts:
+            key = outcome_bucket(v)
+            buckets[key] = buckets.get(key, 0) + 1
+        groups: dict[str, list] = {}
+        for v in verdicts:
+            folder = str(rows.get(v.index, {}).get("folder") or "-")
+            groups.setdefault(folder, []).append(v)
+        overview = (kpis(kpi_items)
+                    + stat_strip([("skipped (no label)", skipped),
+                                  ("reference-na", stats.get("reference-na", 0))])
+                    + '<div class="charts">'
+                    + donut_card("Outcomes", buckets, acc)
+                    + bars_card("Accuracy by folder",
+                                [(name, sum(v.ok for v in vs), len(vs))
+                                 for name, vs in sorted(groups.items())])
+                    + "</div>")
+
+        data = {"verdicts": [{
+            "index": v.index, "ok": v.ok, "detail": v.detail, "note": v.note,
+            "question": str(rows.get(v.index, {}).get("question", "")),
+            "label": str(rows.get(v.index, {}).get(self.label_field, "")),
+            "answer": str(rows.get(v.index, {}).get(self.answer_field, "")),
+            "data": v.data,
+        } for v in verdicts]}
+        n_miss = sum(1 for v in verdicts if not v.ok)
+        return page(
+            title=f"ChillRAG Eval · {self.name}",
+            body=overview + _BODY,
+            script=_SCRIPT,
+            data=data,
+            footer=f"{answers} · {n_miss} not matching")
+
+
+_BODY = """
+  <h2>Rows</h2>
+  <div class="toolbar">
+    <label><input type="checkbox" id="show-all"> show matching rows too</label>
+    <span class="cnt" id="shown-cnt"></span>
+  </div>
+  <div class="table-card">
+    <table id="vtable">
+      <thead><tr>
+        <th class="num">index</th><th>verdict</th><th>question</th>
+        <th>reference</th><th>answered</th><th>note</th>
+      </tr></thead>
+      <tbody></tbody>
+    </table>
+  </div>
+"""
+
+_SCRIPT = """
+(function () {
+  var V = CR_DATA.verdicts;
+  var openRows = {};
+  var showAll = document.getElementById("show-all");
+  var tbody = document.querySelector("#vtable tbody");
+
+  function answeredCell(v) {
+    var d = v.data || {};
+    if (d.value !== undefined) return d.value + " " + (d.unit || "(bare)");
+    return crClip(v.answer, 30);
+  }
+
+  function rowHtml(v) {
+    var main = "<tr class='main' data-i='" + v.index + "'>" +
+      "<td class='num'>" + v.index + "</td>" +
+      "<td><span class='badge " + (v.ok ? "ok" : "bad") + "'>" + (v.ok ? "✓" : "✗") +
+      " " + crEsc(v.detail) + "</span></td>" +
+      "<td>" + crEsc(crClip(v.question, 44)) + "</td>" +
+      "<td class='mono'>" + crEsc(crClip(v.label, 26)) + "</td>" +
+      "<td class='mono'>" + crEsc(crClip(answeredCell(v), 30)) + "</td>" +
+      "<td>" + crEsc(crClip(v.note, 40)) + "</td></tr>";
+    if (!openRows[v.index]) return main;
+    var d = v.data || {};
+    var compare = "";
+    if (d.ref_value !== undefined) {
+      compare = "reference <b>" + crEsc(d.ref_value) + " " + crEsc(d.ref_unit || "(bare)") +
+        "</b> (" + d.ref_precision + " dp) · answered <b>" + crEsc(d.value) + " " +
+        crEsc(d.unit || "(bare)") + "</b> (" + d.precision + " dp)" +
+        (d.dimension ? " · " + crEsc(d.dimension) + " conversion" : "");
+    }
+    var detail = "<tr class='expand'><td colspan='6'><div class='expand-grid'>" +
+      "<div><div class='kv'>question</div><div class='full'>" + crEsc(v.question) + "</div>" +
+      (compare ? "<div class='kv'>comparison</div><div class='full'>" + compare + "</div>" : "") +
+      "</div>" +
+      "<div><div class='kv'>reference</div><div class='full box'>" + crEsc(v.label) + "</div>" +
+      "<div class='kv'>answered</div><div class='full box'>" + crEsc(v.answer) + "</div>" +
+      (v.note ? "<div class='kv'>note</div><div class='full'>" + crEsc(v.note) + "</div>" : "") +
+      "</div></div></td></tr>";
+    return main + detail;
+  }
+
+  function render() {
+    var shown = V.filter(function (v) { return showAll.checked || !v.ok; });
+    document.getElementById("shown-cnt").textContent =
+      shown.length + " / " + V.length + " scored";
+    tbody.innerHTML = shown.map(rowHtml).join("");
+  }
+  showAll.onchange = render;
+  tbody.onclick = function (e) {
+    var tr = e.target.closest("tr.main");
+    if (!tr) return;
+    openRows[tr.dataset.i] = !openRows[tr.dataset.i];
+    render();
+  };
+  render();
+})();
+"""

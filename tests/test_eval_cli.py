@@ -84,8 +84,23 @@ def test_hostile_content_cannot_break_the_report(tmp_path):
     ])
     report = tmp_path / "q.answers.eval.html"
     assert main([str(path), "--no-open"]) == 0
-    embedded = report.read_text(encoding="utf-8").split('id="eval-data">')[1]
+    embedded = report.read_text(encoding="utf-8").split('id="page-data">')[1]
     assert "</script><b>injected</b>" not in embedded.split("</script>")[0]
+
+
+def test_the_report_carries_the_evaluators_own_marks(tmp_path):
+    """The numeric page marks every question right or wrong, by its rule."""
+    path = _answers(tmp_path, [
+        {"index": 0, "question": "q1", "answer": "3.51亿元", "label": "35142万元"},
+        {"index": 1, "question": "q2", "answer": "35142.1万元", "label": "35142.05万元"},
+        {"index": 2, "question": "q3", "answer": "35100万元", "label": "35142万元"},
+    ])
+    report = tmp_path / "q.answers.eval.html"
+    assert main([str(path), "--no-open"]) == 0
+    html = report.read_text(encoding="utf-8")
+    assert "66.7%" in html and "ChillRAG Eval · fin-numeric" in html
+    for rule in ("exact", "round-tol", "mismatch"):
+        assert rule in html, f"each row shows the rule that decided: {rule}"
 
 
 def test_no_report_skips_the_artifact(tmp_path):
