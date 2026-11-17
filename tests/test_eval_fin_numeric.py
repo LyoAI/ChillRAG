@@ -68,10 +68,48 @@ def test_a_rounding_fallback_covers_the_last_digit():
     assert _score("35142.1万元", "35142.05万元").detail == "round-tol"
 
 
+def test_a_bare_reference_is_read_in_the_answers_base_unit():
+    """Datasets export raw numbers — 元 for amounts, ratios for rates — so a
+    unit-bearing answer converts into that base instead of failing on digits."""
+    assert _score("85,247,150千元", "85247150000").detail == "exact"
+    assert _score("387.76亿元", "38775657921").ok
+    assert _score("375,836百万元", "375836000000").ok
+    assert _score("-150.26亿元", "-15026294544").ok
+
+
+def test_a_bare_ratio_reference_matches_percent_answers():
+    assert _score("8.6%", "0.086").detail == "exact"
+    assert _score("216%", "2.16").detail == "exact"
+
+
+def test_a_bare_percent_number_reference_matches_too():
+    """Datasets write rates as percent numbers just as often as ratios —
+    both readings of a bare reference are accepted, rounding included."""
+    assert _score("12.11%", "12.11").detail == "exact"
+    assert _score("1.88%", "1.88").ok
+    assert _score("-237.61%", "-237.62").detail == "round-tol"
+    assert _score("3.60%", "3.55").detail == "exact", "the answer claims ±0.1pp; 3.55 fits"
+    assert _score("-1387%", "-1386.98").ok
+
+
+def test_genuinely_wrong_percent_answers_still_fail():
+    assert not _score("14%", "14.87").ok, "14% vs 14.87 is a wrong answer, not a unit gap"
+    assert not _score("10.52%", "9.97").ok, "5.5% off is outside both readings"
+    assert not _score("-1.20%", "-2.03").ok
+
+
+def test_wrong_scale_still_fails_against_a_bare_reference():
+    assert not _score("9,259.94亿元", "92599365.5").ok, "10× off stays wrong"
+    assert not _score("801.16亿元", "82675868912").ok, "3.1% off is outside the 1% bound"
+    assert not _score("12.5万元", "12.5").ok, \
+        "12.5万 is not 12.5 — digit coincidence no longer passes raw"
+
+
 def test_incompatible_dimensions_and_foreign_currency_fail():
     assert _score("3.5万美元", "24.5万元").detail == "unit-mismatch"
-    v = _score("9259.94亿元", "92599365.5")
-    assert not v.ok, "a bare reference implies its own unit; no conversion is guessed"
+    assert _score("3.5万美元", "245000").detail == "unit-mismatch", \
+        "foreign currency converts to no bare reference"
+    assert _score("9259.94亿元", "92599365.5").detail == "mismatch"
 
 
 # ------------------------------------------------------------ abstention --

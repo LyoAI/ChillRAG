@@ -83,7 +83,7 @@ class Exact(Evaluator):
 _BODY = """
   <h2>Rows</h2>
   <div class="toolbar">
-    <label><input type="checkbox" id="show-all"> show matching rows too</label>
+    <label><input type="checkbox" id="only-bad"> only wrong answers</label>
     <span class="cnt" id="shown-cnt"></span>
   </div>
   <div class="table-card">
@@ -101,7 +101,7 @@ _SCRIPT = """
 (function () {
   var V = CR_DATA.verdicts;
   var openRows = {};
-  var showAll = document.getElementById("show-all");
+  var onlyBad = document.getElementById("only-bad");
   var tbody = document.querySelector("#vtable tbody");
 
   function rowHtml(v) {
@@ -124,12 +124,12 @@ _SCRIPT = """
   }
 
   function render() {
-    var shown = V.filter(function (v) { return showAll.checked || !v.ok; });
+    var shown = V.filter(function (v) { return !onlyBad.checked || !v.ok; });
     document.getElementById("shown-cnt").textContent =
       shown.length + " / " + V.length + " scored";
     tbody.innerHTML = shown.map(rowHtml).join("");
   }
-  showAll.onchange = render;
+  onlyBad.onchange = render;
   tbody.onclick = function (e) {
     var tr = e.target.closest("tr.main");
     if (!tr) return;

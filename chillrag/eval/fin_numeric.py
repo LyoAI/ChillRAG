@@ -17,8 +17,15 @@ thousand/million/billion, compound units multiply, a bare currency is base 1,
 foreign currency is a different dimension and never converts); rates against
 a pure ratio (``%`` is ×0.01, ``倍`` is ×1). An answer without a unit word
 implies the reference's unit and is never converted; incompatible dimensions
-(``万元`` vs ``%``) fail outright. The ``unit`` column exists for labels
-written as bare numbers — a unit written inside the label always wins.
+(``万元`` vs ``%``) fail outright.
+
+A bare reference is read through the answer's dimension: money in 元
+(``85,247,150千元`` matches ``85247150000``), rates under **both** readings
+datasets use — as a ratio (``8.6%`` matches ``0.086``) and as a percent
+number (``12.11%`` matches ``12.11``, ``-1387%`` matches ``-1386.98``) —
+whichever one agrees at the claimed precision. The ``unit`` column exists
+for labels written as bare numbers in a fixed non-base unit; a unit written
+inside the label always wins.
 
 A reference marked N/A requires abstention: no value in the answer, or the
 row counts as fabricated. Unit-bearing numbers in an answer outrank bare
@@ -29,6 +36,7 @@ from __future__ import annotations
 
 import re
 from decimal import Decimal, InvalidOperation, ROUND_HALF_EVEN
+from math import log10
 from typing import ClassVar
 
 from chillrag.config import EVAL_MONEY_REL_TOL, EVAL_RATE_REL_TOL, EVAL_ROUND_TOL
@@ -130,53 +138,104 @@ def _rate_scale(unit: str) -> float | None:
     return None
 
 
+def _close(ref: tuple, ans: tuple, dimension: str) -> tuple[bool, str]:
+    """One reading pair, at three widening steps: quantize both to the coarser
+    of their precisions-in-base, then the reference's round tolerance (in its
+    own writing's scale), then — dimensional pairs only — the relative bound.
+    """
+    try:
+        ref_value, ref_dp, ref_tol = ref
+        ans_value, ans_dp, _ = ans
+        coarse = Decimal(1).scaleb(-min(ref_dp, ans_dp))
+        if (Decimal(str(ref_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)
+                == Decimal(str(ans_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)):
+            return True, "exact"
+        ref_step = Decimal(1).scaleb(-ref_dp)
+        if abs(Decimal(str(ans_value)).quantize(ref_step, rounding=ROUND_HALF_EVEN)
+               - Decimal(str(ref_value))) <= Decimal(str(ref_tol)):
+            return True, "round-tol"
+        rel = {"rate": EVAL_RATE_REL_TOL, "money": EVAL_MONEY_REL_TOL}.get(dimension)
+        if rel is not None and (abs(Decimal(str(ans_value)) - Decimal(str(ref_value)))
+                                <= Decimal(str(rel)) * abs(Decimal(str(ref_value)))):
+            return True, f"rel-{dimension}"
+        return False, "mismatch"
+    except InvalidOperation:
+        return False, "overflow"
+
+
+def _readings(value: float, unit: str, precision: int,
+              dimension: str) -> list[tuple[float, int, float]] | None:
+    """How one side reads in the dimension's base: ``(value, dp, round_tol)``.
+
+    A unitful side has exactly one reading — its value scaled into base, with
+    its precision carried over (``35142万元`` reads as 351,420,000 元 with the
+    slop of 0.1万元). A bare side reads literally, and — rates only — a second
+    time as a percent number (``12.11`` also reads as ``12.11%``), since
+    datasets write rates both ways. ``None`` = this unit has no reading in
+    this dimension (foreign currency in the money dimension).
+    """
+    tol = EVAL_ROUND_TOL  # the slop is 0.1 in each reading's own writing space
+    if not unit:
+        out = [(value, precision, tol)]
+        if dimension == "rate":
+            out.append((value * 0.01, precision + 2, tol * 0.01))
+        return out
+    scale = _money_scale(unit) if dimension == "money" else _rate_scale(unit)
+    if scale is None:
+        return None
+    return [(value * scale, precision - round(log10(scale)), tol * scale)]
+
+
 def _compare(ref_value: float, ref_unit: str, ref_precision: int,
              value: float, unit: str, precision: int) -> tuple[bool, str, str, str]:
     """Match two values under their units; ``(ok, detail, note, dimension)``.
 
-    Units convert first — money dimension into money, rate into rate, an
-    incompatible pair fails. The converted value then quantizes to the
-    coarser of the two claimed precisions (the answer's precision, expressed
-    in the reference's unit, scales by the conversion factor), with the
-    round-tolerance and cross-unit relative bounds as fallbacks.
+    The dimension comes from whichever side carries a unit. Each side is then
+    read into that dimension's base — 元 for money, a pure ratio for rates —
+    and every reading combination is tried: a bare rate reference matches a
+    percent answer as a ratio (``8.6%`` = ``0.086``) or as a percent number
+    (``12.11%`` = ``12.11``). Only when neither side carries a unit does the
+    comparison fall back to literal digit equality; an incompatible pair
+    (``万元`` vs ``%``, foreign currency) fails outright.
     """
-    factor = Decimal(1)
-    note = ""
-    dimension = ""
-    if unit and ref_unit and unit != ref_unit:
-        ref_scale, ans_scale = _money_scale(ref_unit), _money_scale(unit)
-        if ref_scale is not None and ans_scale is not None:
-            dimension = "money"
-        else:
-            ref_scale, ans_scale = _rate_scale(ref_unit), _rate_scale(unit)
-            if ref_scale is None or ans_scale is None:
-                return False, "unit-mismatch", f"{unit!r} and {ref_unit!r} are different dimensions", ""
-            dimension = "rate"
-        value = value * ans_scale / ref_scale
-        factor = Decimal(str(ans_scale)) / Decimal(str(ref_scale))
-        note = f"{unit} → {ref_unit}: {value:,.6g} vs {ref_value:,.6g}"
-    try:
-        # Steps are powers of ten, so the coarser of the two claimed precisions
-        # is an exponent comparison — multiplying Decimals here would drag the
-        # factor's fractional exponent in and silently quantize too fine.
-        from math import log10
+    def dim_of(u: str) -> str:
+        if _money_scale(u) is not None:
+            return "money"
+        if _rate_scale(u) is not None:
+            return "rate"
+        return ""
 
-        factor_exp = round(log10(factor))
-        coarse = Decimal(1).scaleb(max(-ref_precision, -precision + factor_exp))
-        if (Decimal(str(value)).quantize(coarse, rounding=ROUND_HALF_EVEN)
-                == Decimal(str(ref_value)).quantize(coarse, rounding=ROUND_HALF_EVEN)):
-            return True, "exact", note, dimension
-        ref_step = Decimal(1).scaleb(-ref_precision)
-        if (abs(Decimal(str(value)).quantize(ref_step, rounding=ROUND_HALF_EVEN)
-                - Decimal(str(ref_value))) <= Decimal(str(EVAL_ROUND_TOL))):
-            return True, "round-tol", note, dimension
-        rel = {"rate": EVAL_RATE_REL_TOL, "money": EVAL_MONEY_REL_TOL}.get(dimension)
-        if rel is not None and (abs(Decimal(str(value)) - Decimal(str(ref_value)))
-                                <= Decimal(str(rel)) * abs(Decimal(str(ref_value)))):
-            return True, f"rel-{dimension}", note, dimension
-        return False, "mismatch", note, dimension
-    except InvalidOperation:
-        return False, "overflow", note, dimension
+    if unit and ref_unit and dim_of(unit) and dim_of(ref_unit) \
+            and dim_of(unit) != dim_of(ref_unit):
+        return False, "unit-mismatch", f"{unit!r} and {ref_unit!r} are different dimensions", ""
+    dimension = dim_of(unit) or dim_of(ref_unit)
+    if dimension and unit and not dim_of(unit):
+        return False, "unit-mismatch", f"{unit!r} converts to no reference", ""
+    if dimension and ref_unit and not dim_of(ref_unit):
+        return False, "unit-mismatch", f"{ref_unit!r} converts to no reference", ""
+    if not dimension and (unit or ref_unit) and (
+            (unit and _known_unit(unit)) or (ref_unit and _known_unit(ref_unit))):
+        return False, "unit-mismatch", "the unit converts to no bare reference", ""
+
+    ref_readings = _readings(ref_value, ref_unit, ref_precision, dimension) \
+        if dimension else [(ref_value, ref_precision, EVAL_ROUND_TOL * 10.0 ** (-ref_precision))]
+    ans_readings = _readings(value, unit, precision, dimension) \
+        if dimension else [(value, precision, 0.0)]
+    # The relative bound is a cross-conversion fallback: identical units mean
+    # no conversion happened, and 1% slop must not excuse a wrong digit run.
+    allow_rel = bool(dimension) and (not unit or not ref_unit or unit != ref_unit)
+
+    notes: list[str] = []
+    for r in ref_readings:
+        for a in ans_readings:
+            ok, detail = _close(r, a, dimension if allow_rel else "")
+            if ok:
+                note = (f"base ({dimension}): {r[0]:,.6g} vs {a[0]:,.6g}"
+                        if dimension and (unit or ref_unit) else "")
+                return True, detail, note, dimension
+            notes.append(f"{r[0]:,.6g} vs {a[0]:,.6g}")
+    note = f"base ({dimension}): " + " · ".join(notes) if dimension else ""
+    return False, "mismatch", note, dimension
 
 
 class FinNumeric(Evaluator):
@@ -292,7 +351,7 @@ class FinNumeric(Evaluator):
 _BODY = """
   <h2>Rows</h2>
   <div class="toolbar">
-    <label><input type="checkbox" id="show-all"> show matching rows too</label>
+    <label><input type="checkbox" id="only-bad"> only wrong answers</label>
     <span class="cnt" id="shown-cnt"></span>
   </div>
   <div class="table-card">
@@ -310,7 +369,7 @@ _SCRIPT = """
 (function () {
   var V = CR_DATA.verdicts;
   var openRows = {};
-  var showAll = document.getElementById("show-all");
+  var onlyBad = document.getElementById("only-bad");
   var tbody = document.querySelector("#vtable tbody");
 
   function answeredCell(v) {
@@ -349,12 +408,12 @@ _SCRIPT = """
   }
 
   function render() {
-    var shown = V.filter(function (v) { return showAll.checked || !v.ok; });
+    var shown = V.filter(function (v) { return !onlyBad.checked || !v.ok; });
     document.getElementById("shown-cnt").textContent =
       shown.length + " / " + V.length + " scored";
     tbody.innerHTML = shown.map(rowHtml).join("");
   }
-  showAll.onchange = render;
+  onlyBad.onchange = render;
   tbody.onclick = function (e) {
     var tr = e.target.closest("tr.main");
     if (!tr) return;
